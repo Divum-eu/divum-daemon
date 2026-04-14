@@ -1,16 +1,26 @@
 from abc import ABC, abstractmethod
 
+from schemas.minecraft_server_config import MinecraftServerConfig
+
+
 class ServerManager(ABC):
 
     @abstractmethod
-    def create_server(self, server_name: str) -> str | None: # TODO: add a configuration param: custom type
+    def create(self, config: MinecraftServerConfig) -> str | None:
         """Creates a server and return the unique identifier for it"""
         pass
 
-    def start_server(self, server_id: str) -> bool:
+    @abstractmethod
+    def status(self, server_id: str) -> str:
+        """"""
+        pass
+
+    @abstractmethod
+    def start(self, server_id: str) -> bool:
         """Starts an existing server"""
         pass
 
-    def stop_server(self, server_id: str) -> bool:
+    @abstractmethod
+    def stop(self, server_id: str) -> bool:
         """Stops an existing server"""
         pass
