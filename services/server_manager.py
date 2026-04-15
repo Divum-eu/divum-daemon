@@ -12,7 +12,7 @@ class ServerManager(ABC):
 
     @abstractmethod
     def status(self, server_id: str) -> str:
-        """"""
+        """Returns the status of an existing instance and it's logs"""
         pass
 
     @abstractmethod
