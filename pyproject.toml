@@ -1,7 +1,11 @@
 [project]
 name = "divum-daemon"
 version = "0.1.0"
-description = "Add your description here"
+description = "A lightweight REST API that builds, removes and manages Divum's minecraft server instances' lifecycles."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = []
+
+
+[tool.setuptools.packages.find]
+where = ["src"]
