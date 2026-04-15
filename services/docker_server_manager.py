@@ -3,17 +3,15 @@ import shutil
 
 import docker
 from docker.models.containers import Container
-from dotenv import load_dotenv
 
 from exceptions.client_api_exception import ClientAPIException
 from exceptions.docker_container_not_found_exception import DockerContainerNotFoundException
 from exceptions.docker_image_not_found_exception import DockerImageNotFoundException
 from exceptions.server_name_already_exists_exception import ServerNameAlreadyExistsException
-from schemas.minecraft_server_config import MinecraftServerConfig
+from schemas.minecraft_server_itzg_config import MinecraftServerITZGConfig
 from schemas.minecraft_server_status import MinecraftServerStatus, Status
 from server_manager import ServerManager
 
-load_dotenv()
 DOCKER_MINECRAFT_IMAGE = "itzg/minecraft-server"
 WORLDS_DIR = os.environ.get("WORLDS_DIR", "..")
 
@@ -23,16 +21,18 @@ class DockerServerManager(ServerManager):
         try:
             self.client = docker.from_env()
         except Exception as err:
+            print(err)
             raise ClientAPIException(str(err))
 
-    def create(self, config: MinecraftServerConfig ) -> str | None:
+    def create(self, config: MinecraftServerITZGConfig) -> str | None:
+        """Creates an itzg/minecraft-server container with the given configuration"""
         try:
-            if self.__exists(config.server_name):
-                raise ServerNameAlreadyExistsException(config.server_name)
+            if self.__exists(config.container_name):
+                raise ServerNameAlreadyExistsException(config.container_name)
 
             self.client.images.pull("itzg/minecraft-server", tag="latest")
 
-            host_path = os.path.abspath(f"{WORLDS_DIR}/data/{config.server_name}")
+            host_path = os.path.abspath(f"{WORLDS_DIR}/data/{config.container_name}")
             if not os.path.exists(host_path):
                 os.makedirs(host_path)
             else:
@@ -41,7 +41,7 @@ class DockerServerManager(ServerManager):
 
             container = self.client.containers.create(
                 DOCKER_MINECRAFT_IMAGE,
-                name=f"{config.server_name}",
+                name=f"{config.container_name}",
                 environment=config.to_docker_env(),
                 nano_cpus=int(config.cpu_cores * (10 ** 9)), # 1 core = 10 ^ 9
                 volumes={
@@ -114,25 +114,31 @@ class DockerServerManager(ServerManager):
             raise ClientAPIException(str(err))
 
 
-manager = DockerServerManager()
+# FOR TESTING
 
-config: MinecraftServerConfig = MinecraftServerConfig(
-    server_name="dimpex",
-    memory=2,
-    cpu_cores=1,
-    type="FABRIC",
-    eula=True,
-    difficulty="hard",
-    mode="creative",
-    level="swqt",
-    resource_pack="https://download.mc-packs.net/pack/59eb5f3c13e5a064dae879cce3e4c6aff6bf9b87.zip",
-    resource_pack_sha1="59eb5f3c13e5a064dae879cce3e4c6aff6bf9b87",
-    online_mode=False,
-)
+# manager = DockerServerManager()
 
-manager.create(config)
-manager.start(config.server_name)
-# manager.stop(config.server_name)
-status: MinecraftServerStatus = manager.status(config.server_name)
-print(status.status.name)
-print(status.log)
+# config: MinecraftServerITZGConfig = MinecraftServerITZGConfig(
+#     server_name="dimpex",
+#     memory=2,
+#     cpu_cores=1,
+#     type="VANILLA",
+#     eula=True,
+#     difficulty="hard",
+#     mode="creative",
+#     level="swqt",
+#     resource_pack="https://download.mc-packs.net/pack/59eb5f3c13e5a064dae879cce3e4c6aff6bf9b87.zip",
+#     resource_pack_sha1="59eb5f3c13e5a064dae879cce3e4c6aff6bf9b87",
+#     online_mode=True,
+#     enable_whitelist=True,
+#     whitelist=["Dimpex", "Dimitar45"],
+#     container_name="dimpex",
+#     rcon_password="123"
+# )
+#
+# manager.create(config)
+# manager.start(config.server_name)
+# # manager.stop(config.server_name)
+# status: MinecraftServerStatus = manager.status(config.server_name)
+# print(status.status.name)
+# print(status.log)

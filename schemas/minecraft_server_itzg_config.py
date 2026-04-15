@@ -4,8 +4,8 @@ from typing import ClassVar
 from pydantic import BaseModel, Field, field_validator, ValidationError
 
 # Config follows the documentation at: https://docker-minecraft-server.readthedocs.io/en/latest/variables/
-class MinecraftServerConfig(BaseModel):
-    server_name: str = Field(..., min_length=3, max_length=50)
+class MinecraftServerITZGConfig(BaseModel):
+    container_name: str = Field(..., min_length=3, max_length=50)
 
     # ---------------- GENERAL OPTIONS ----------------
     memory: int = Field(default=2, ge=1, le=16)
@@ -33,7 +33,7 @@ class MinecraftServerConfig(BaseModel):
 
     # ---------------- RCON ----------------
     enable_rcon: bool = Field(default=True)
-    rcon_password: str = Field(default="")
+    rcon_password: str = Field(...)
     broadcast_rcon_to_ops: bool = Field(default=False)
     rcon_cmds_startup: str = Field(default="")
     rcon_cmds_on_connect: str = Field(default="")
@@ -41,7 +41,16 @@ class MinecraftServerConfig(BaseModel):
     rcon_cmds_on_disconnect: str = Field(default="")
     rcon_cmds_last_disconnect: str = Field(default="")
 
-    # TODO: add all server.properties variables
+    # ---------------- SERVER PROPERTIES ----------------
+    ops: list[str] = Field(default=[])
+    op_permission_level: int = Field(default=0, ge=0, le=4)
+    icon: str = Field(default="")
+    override_icon: bool = Field(default=False)
+    seed: str = Field(default="")
+    level_type: str = Field(default="NORMAL")
+    custom_server_properties: list[str] = Field(default=[])
+    pvp: bool = Field(default=True)
+    server_name: str = Field(...)
 
     # ---------------- FABRIC VARIABLES ----------------
     fabric_launcher_version: str = Field(default="LATEST")
@@ -75,6 +84,8 @@ class MinecraftServerConfig(BaseModel):
 
     MODE_TYPES: ClassVar[set[str]] = {"creative", "survival", "adventure", "spectator"}
 
+    LEVEL_TYPES: ClassVar[set[str]] = {"NORMAL", "FLAT", "LARGE_BIOMES", "AMPLIFIED", "SINGLE_BIOME_SURFACE"}
+
     # ---------------- FIELD VALIDATORS ----------------
 
     @field_validator("type")
@@ -101,6 +112,22 @@ class MinecraftServerConfig(BaseModel):
 
         return v.lower()
 
+    @field_validator("level_type")
+    @classmethod
+    def validate_level_type(cls, v: str) -> str:
+        if v.upper() not in cls.LEVEL_TYPES:
+            raise ValueError(f"Level type {v} is not supported")
+
+        return v.upper()
+
+    @field_validator("server_name")
+    @classmethod
+    def validate_server_name(cls, v: str):
+        if ":" in v:
+            raise ValueError(f"Server name cannot contain ':'")
+
+        return v
+
     @field_validator("rcon_password")
     @classmethod
     def validate_rcon_password(cls, v: str) -> str:
@@ -122,7 +149,12 @@ class MinecraftServerConfig(BaseModel):
             "DIFFICULTY": self.difficulty,
             "MODE": self.mode,
             "LEVEL": self.level,
+            "LEVEL_TYPE": self.level_type,
+            "SEED": self.seed,
             "ONLINE_MODE": "TRUE" if self.online_mode else "FALSE",
+            "OP_PERMISSION_LEVEL": self.op_permission_level,
+            "PVP": "TRUE" if self.pvp else "FALSE",
+            "SERVER_NAME": self.server_name,
 
             # Booleans must be explicit strings for the bash scripts
             "RESOURCE_PACK_ENFORCE": "TRUE" if self.resource_pack_enforce else "FALSE",
@@ -147,16 +179,30 @@ class MinecraftServerConfig(BaseModel):
         if self.rcon_cmds_on_connect:
             env["RCON_CMDS_ON_CONNECT"] = self.rcon_cmds_on_connect
         if self.rcon_cmds_first_connect:
-            env["RCON_CMDS_FIRST_CONNECT"] = self.rcon_cmds_FIRST_CONNECT
+            env["RCON_CMDS_FIRST_CONNECT"] = self.rcon_cmds_first_connect
         if self.rcon_cmds_on_disconnect:
             env["RCON_CMDS_ON_DISCONNECT"] = self.rcon_cmds_on_disconnect
         if self.rcon_cmds_last_disconnect:
             env["RCON_CMDS_LAST_DISCONNECT"] = self.rcon_cmds_last_disconnect
 
         # 3. List Conversions
-        if self.whitelist:
+        if self.whitelist and self.online_mode:
             # itzg image expects a comma-separated string for the whitelist
             env["WHITELIST"] = ",".join(self.whitelist)
+            env["OVERRIDE_WHITELIST"] = "TRUE"
+            # env["RCON_CMDS_STARTUP"] = '\n'.join([f"whitelist add {username}" for username in self.whitelist])
+
+        if self.ops:
+            # itzg image expects a comma-separated string for the ops
+            env["OPS"] = ",".join(self.ops)
+
+        if self.icon:
+            env["ICON"] = self.icon
+            env["OVERRIDE_ICON"] = "TRUE"
+
+        if self.custom_server_properties:
+            # itzg image expects a newline-separated string for the custom server properties
+            env["CUSTOM_SERVER_PROPERTIES"] = '\n'.join(self.custom_server_properties)
 
         # 4. Conditional Platform Variables (Only inject Fabric vars if actually running Fabric)
         if self.type.upper() == "FABRIC":
