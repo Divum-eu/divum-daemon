@@ -1,9 +1,9 @@
 import docker
 
-from exceptions.client_api_exception import ClientAPIException
-from exceptions.docker_image_not_found_exception import DockerImageNotFoundException
-from exceptions.server_name_already_exists_exception import ServerNameAlreadyExistsException
-from server_manager import ServerManager
+from src.exceptions.client_api_exception import ClientAPIException
+from src.exceptions.docker_image_not_found_exception import DockerImageNotFoundException
+from src.exceptions.server_name_already_exists_exception import ServerNameAlreadyExistsException
+from src.services.server_manager import ServerManager
 
 DOCKER_MINECRAFT_IMAGE = "itzg/minecraft-server"
 
