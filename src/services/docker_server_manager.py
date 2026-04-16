@@ -4,13 +4,14 @@ import shutil
 import docker
 from docker.models.containers import Container
 
-from src.exceptions.client_api_exception import ClientAPIException
-from src.exceptions.docker_image_not_found_exception import DockerImageNotFoundException
-from src.exceptions.server_name_already_exists_exception import ServerNameAlreadyExistsException
-from src.services.server_manager import ServerManager
+from exceptions.client_api_exception import ClientAPIException
+from exceptions.docker_image_not_found_exception import DockerImageNotFoundException
+from exceptions.server_name_already_exists_exception import ServerNameAlreadyExistsException
 
-from src.schemas.minecraft_server_itzg_config import MinecraftServerITZGConfig
-from src.schemas.minecraft_server_status import MinecraftServerStatus, Status
+from services.server_manager import ServerManager
+
+from schemas.minecraft_server_itzg_config import MinecraftServerITZGConfig
+from schemas.minecraft_server_status import MinecraftServerStatus, Status
 
 DOCKER_MINECRAFT_IMAGE = "itzg/minecraft-server"
 WORLDS_DIR = os.environ.get("WORLDS_DIR", "..")

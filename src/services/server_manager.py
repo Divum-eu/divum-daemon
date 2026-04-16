@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+from schemas.minecraft_server_status import MinecraftServerStatus
 from schemas.minecraft_server_itzg_config import MinecraftServerITZGConfig
 
 
@@ -11,7 +12,7 @@ class ServerManager(ABC):
         pass
 
     @abstractmethod
-    def status(self, server_id: str) -> str:
+    def status(self, server_id: str) -> MinecraftServerStatus:
         """Returns the status of an existing instance and it's logs"""
         pass
 
