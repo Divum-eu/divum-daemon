@@ -1,7 +1,7 @@
 from abc import ABC
 from typing import Literal
 
-from schemas.minecraft_server_config import MinecraftServerConfig
+from schemas.minecraft_server_config.minecraft_server_config import MinecraftServerConfig
 
 
 class MinecraftVanillaServerConfig(MinecraftServerConfig, ABC):

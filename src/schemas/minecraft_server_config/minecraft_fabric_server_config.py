@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from schemas.minecraft_server_config import MinecraftServerConfig
+from schemas.minecraft_server_config.minecraft_server_config import MinecraftServerConfig
 
 
 class MinecraftFabricServerConfig(MinecraftServerConfig, ABC):
