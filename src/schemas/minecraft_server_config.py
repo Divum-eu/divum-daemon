@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from utils.mojang_api import VALID_MINECRAFT_VERSIONS, fetch_mojang_versions
 
-
+# Config follows the documentation at: https://docker-minecraft-server.readthedocs.io/en/latest/variables/
 class MinecraftServerConfig(BaseModel, ABC):
     memory_limit: int = Field(..., ge=1)
     cpu_cores_limit: float = Field(..., gt=0.0)
@@ -54,7 +54,7 @@ class MinecraftServerConfig(BaseModel, ABC):
             "ONLINE_MODE": "TRUE" if self.online_mode else "FALSE",
 
             "ENABLE_RCON": "TRUE" if self.enable_rcon else "FALSE",
-            "RCON_PASSWORD": "TRUE" if self.rcon_password else "FALSE",
+            "RCON_PASSWORD": self.rcon_password,
             "BROADCAST_RCON_TO_OPS": "TRUE" if self.broadcast_rcon_to_ops else "FALSE",
 
             "OVERRIDE_WHITELIST": "TRUE" if self.override_whitelist else "FALSE",
@@ -112,6 +112,7 @@ class MinecraftServerConfig(BaseModel, ABC):
         if v in VALID_MINECRAFT_VERSIONS:
             return v
 
+        # Update cache if version hasn't been seen
         fetch_mojang_versions()
 
         if v in VALID_MINECRAFT_VERSIONS:
