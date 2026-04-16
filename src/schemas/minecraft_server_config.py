@@ -53,6 +53,10 @@ class MinecraftServerConfig(BaseModel, ABC):
             "LEVEL": self.level,
             "ONLINE_MODE": "TRUE" if self.online_mode else "FALSE",
 
+            "RESOURCE_PACK": self.resource_pack,
+            "RESOURCE_PACK_SHA1": self.resource_pack_sha1,
+            "RESOURCE_PACK_ENFORCE": "TRUE" if self.resource_pack_enforce else "FALSE",
+
             "ENABLE_RCON": "TRUE" if self.enable_rcon else "FALSE",
             "RCON_PASSWORD": self.rcon_password,
             "BROADCAST_RCON_TO_OPS": "TRUE" if self.broadcast_rcon_to_ops else "FALSE",
@@ -62,11 +66,6 @@ class MinecraftServerConfig(BaseModel, ABC):
             "PVP": "TRUE" if self.pvp else "FALSE",
             "SERVER_NAME": self.server_name,
         }
-
-        if self.resource_pack and self.resource_pack_sha1:
-            env["RESOURCE_PACK"] = self.resource_pack
-            env["RESOURCE_PACK_SHA1"] = self.resource_pack_sha1
-            env["RESOURCE_PACK_ENFORCE"] = "TRUE" if self.resource_pack_enforce else "FALSE"
 
         if self.enable_whitelist and self.whitelist:
             env["WHITELIST"] = ','.join(self.whitelist)
