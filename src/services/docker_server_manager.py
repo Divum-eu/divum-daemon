@@ -1,16 +1,25 @@
 import os
-import shutil
+import uuid
 
 import docker
 from docker.models.containers import Container
 
+from dotenv import load_dotenv
+
+from exceptions.docker_container_not_found_exception import DockerContainerNotFoundException
+from schemas.minecraft_server_config.minecraft_fabric_server_config import MinecraftFabricServerConfig
+from schemas.minecraft_server_config.minecraft_vanilla_server_config import MinecraftVanillaServerConfig
+
 from src.exceptions.client_api_exception import ClientAPIException
 from src.exceptions.docker_image_not_found_exception import DockerImageNotFoundException
-from src.exceptions.server_name_already_exists_exception import ServerNameAlreadyExistsException
+
 from src.services.server_manager import ServerManager
 
-from src.schemas.minecraft_server_itzg_config import MinecraftServerITZGConfig
 from src.schemas.minecraft_server_status import MinecraftServerStatus, Status
+
+from schemas.minecraft_server_config.minecraft_server_config import MinecraftServerConfig
+
+load_dotenv()
 
 DOCKER_MINECRAFT_IMAGE = "itzg/minecraft-server"
 WORLDS_DIR = os.environ.get("WORLDS_DIR", "..")
@@ -24,26 +33,21 @@ class DockerServerManager(ServerManager):
             print(err)
             raise ClientAPIException(str(err))
 
-    def create(self, config: MinecraftServerITZGConfig) -> str | None:
+    def create(self, config: MinecraftServerConfig) -> str | None:
         """Creates an itzg/minecraft-server container with the given configuration"""
         try:
-            if self.__exists(config.container_name):
-                raise ServerNameAlreadyExistsException(config.container_name)
-
             self.client.images.pull("itzg/minecraft-server", tag="latest")
 
-            host_path = os.path.abspath(f"{WORLDS_DIR}/data/{config.container_name}")
-            if not os.path.exists(host_path):
-                os.makedirs(host_path)
-            else:
-                shutil.rmtree(host_path)
-                os.makedirs(host_path)
+            container_name: str = str(uuid.uuid4())
+
+            host_path = os.path.abspath(f"{WORLDS_DIR}/data/{container_name}")
+            os.makedirs(host_path)
 
             container = self.client.containers.create(
                 DOCKER_MINECRAFT_IMAGE,
-                name=f"{config.container_name}",
-                environment=config.to_docker_env(),
-                nano_cpus=int(config.cpu_cores * (10 ** 9)), # 1 core = 10 ^ 9
+                name=container_name,
+                environment=config.export(),
+                nano_cpus=int(config.cpu_cores_limit * (10 ** 9)), # 1 core = 10 ^ 9
                 volumes={
                     host_path: {
                         "bind": "/data",
@@ -54,6 +58,9 @@ class DockerServerManager(ServerManager):
                     '25565/tcp': 25565,  # Minecraft Game Port
                     '25575/tcp': 25575  # RCON Port
                 },
+                # Bypasses Docker's unstable internal DNS proxy to prevent
+                # UnknownHostExceptions when downloading server.jar or hitting Mojang APIs
+                dns=["8.8.8.8", "1.1.1.1"],
                 detach=True,
             )
 
@@ -117,28 +124,28 @@ class DockerServerManager(ServerManager):
 # FOR TESTING
 
 # manager = DockerServerManager()
-
-# config: MinecraftServerITZGConfig = MinecraftServerITZGConfig(
+#
+# config: MinecraftServerConfig = MinecraftFabricServerConfig(
+#     memory_limit=2048,
+#     cpu_cores_limit=1,
 #     server_name="dimpex",
-#     memory=2,
-#     cpu_cores=1,
-#     type="VANILLA",
+#     type="FABRIC",
 #     eula=True,
 #     difficulty="hard",
 #     mode="creative",
 #     level="swqt",
 #     resource_pack="https://download.mc-packs.net/pack/59eb5f3c13e5a064dae879cce3e4c6aff6bf9b87.zip",
 #     resource_pack_sha1="59eb5f3c13e5a064dae879cce3e4c6aff6bf9b87",
-#     online_mode=True,
+#     online_mode=False,
 #     enable_whitelist=True,
 #     whitelist=["Dimpex", "Dimitar45"],
-#     container_name="dimpex",
-#     rcon_password="123"
+#     rcon_password="123",
+#     version="latest"
 # )
 #
-# manager.create(config)
-# manager.start(config.server_name)
+# name: str | None = manager.create(config)
+# manager.start(name)
 # # manager.stop(config.server_name)
-# status: MinecraftServerStatus = manager.status(config.server_name)
+# status: MinecraftServerStatus = manager.status(name)
 # print(status.status.name)
 # print(status.log)
