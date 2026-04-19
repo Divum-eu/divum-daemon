@@ -1,9 +1,12 @@
-from typing import Annotated
+from typing import Annotated, Union
 
 from fastapi import APIRouter, Depends
+from pydantic import Field
 
 from dependencies.services import get_docker_server_manager
-from schemas.minecraft_server_itzg_config import MinecraftServerITZGConfig
+
+from schemas.minecraft_server_config.minecraft_fabric_server_config import MinecraftFabricServerConfig
+from schemas.minecraft_server_config.minecraft_vanilla_server_config import MinecraftVanillaServerConfig
 from services.server_manager import ServerManager
 
 DockerServerManagerDependency = Annotated[
@@ -15,10 +18,14 @@ minecraft_server_router = APIRouter(
     tags=["minecraft_servers"],
 )
 
+MinecraftServerConfig = Annotated[
+    Union[MinecraftVanillaServerConfig, MinecraftFabricServerConfig],
+    Field(discriminator="type")
+]
 
 @minecraft_server_router.post("/")
 async def create_minecraft_server(
-    request: MinecraftServerITZGConfig, server_manager: DockerServerManagerDependency
+    request: MinecraftServerConfig, server_manager: DockerServerManagerDependency
 ):
     server_manager.create(request)
 
