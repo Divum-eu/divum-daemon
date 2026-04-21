@@ -10,10 +10,10 @@ ROUTER_API_ADDRESS = os.getenv("MC_ROUTER_API_ADDRESS", "")
 
 class MCProxyRouter(ProxyRouter):
 
-    async def add(self, server_address: str, backend: str) -> bool:
+    async def add(self, server_address: str, server_host: str) -> bool:
         """Add an entry to the itzg/mc-router hosts"""
 
-        if server_address.strip() == "" or backend.strip() == "":
+        if server_address.strip() == "" or server_host.strip() == "":
             return False
 
         # Check if the given server_address is already registered to avoid record override
@@ -26,7 +26,7 @@ class MCProxyRouter(ProxyRouter):
         # Register the record
         async with aiohttp.ClientSession() as session:
             async with session.post(f"{ROUTER_API_ADDRESS}/routes",
-                                    json={"serverAddress": server_address, "backend": backend}) as response:
+                                    json={"serverAddress": server_address, "backend": server_host}) as response:
 
                 return 200 <= response.status < 300
 
