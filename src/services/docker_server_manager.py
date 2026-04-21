@@ -107,7 +107,7 @@ class DockerServerManager(ServerManager):
             raise DockerContainerNotFoundException(server_id) from ex
         except APIError as err:
             raise ClientAPIException(
-                f"An error occurred while trying get the status of container '{server_id}'."
+                f"An error occurred while trying to get the status of container '{server_id}'."
             ) from err
 
     async def start(self, server_id: str) -> bool:
