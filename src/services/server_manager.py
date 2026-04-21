@@ -13,7 +13,7 @@ class ServerManager(ABC):
 
     @abstractmethod
     async def status(self, server_id: str) -> MinecraftServerStatus:
-        """Returns the status of an existing instance and it's logs"""
+        """Returns the status of an existing instance and its logs"""
         pass
 
     @abstractmethod
