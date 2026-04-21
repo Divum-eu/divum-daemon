@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import Depends
 
 from services.minecraft.docker_server_manager import DockerServerManager
-from services.minecraft.mc_proxy_router import MCProxyRouter
+from services.minecraft.mc_proxy_router_service import MCProxyRouterService
 from services.minecraft.proxy_router import ProxyRouter
 from services.minecraft.server_manager import ServerManager
 
@@ -17,7 +17,7 @@ def get_mc_proxy_router() -> ProxyRouter:
     global _proxy_router_instance
     if _proxy_router_instance is None:
         # Instantiation happens only on first request/call
-        _proxy_router_instance = MCProxyRouter()
+        _proxy_router_instance = MCProxyRouterService()
     return _proxy_router_instance
 
 def get_docker_server_manager(

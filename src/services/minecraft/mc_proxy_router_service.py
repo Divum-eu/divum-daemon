@@ -8,7 +8,7 @@ from services.minecraft.proxy_router import ProxyRouter
 ROUTER_API_ADDRESS = os.getenv("MC_ROUTER_API_ADDRESS", "")
 
 
-class MCProxyRouter(ProxyRouter):
+class MCProxyRouterService(ProxyRouter):
 
     async def add(self, server_address: str, server_host: str) -> bool:
         """Add an entry to the itzg/mc-router hosts"""
