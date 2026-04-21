@@ -27,7 +27,6 @@ class MCProxyRouterService(ProxyRouter):
                     return False
 
         # Register the record
-        async with aiohttp.ClientSession() as session:
             async with session.post(f"{ROUTER_API_ADDRESS}/routes",
                                     json={"serverAddress": server_address, "backend": server_host}) as response:
 
@@ -50,6 +49,5 @@ class MCProxyRouterService(ProxyRouter):
             return False
 
         # Delete the found server address
-        async with aiohttp.ClientSession() as session:
-            async with session.delete(f"{ROUTER_API_ADDRESS}/routes/{server_address}") as response:
-                return 200 <= response.status < 300
+        async with session.delete(f"{ROUTER_API_ADDRESS}/routes/{server_address}") as response:
+            return 200 <= response.status < 300
