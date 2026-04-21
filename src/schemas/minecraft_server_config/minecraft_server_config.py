@@ -1,4 +1,5 @@
 import os
+import re
 from abc import ABC, abstractmethod
 
 import psutil
@@ -37,6 +38,8 @@ class MinecraftServerConfig(BaseModel, ABC):
     seed: str = Field(default="")
     pvp: bool = Field(default=True)
     server_name: str = Field(...)
+
+    server_address: str = Field(...)
 
     @abstractmethod
     def export(self) -> dict[str, str]:
@@ -146,3 +149,18 @@ class MinecraftServerConfig(BaseModel, ABC):
             raise ValueError(f"Server name cannot contain ':'")
 
         return v
+
+    @field_validator("server_address")
+    @classmethod
+    def validate_server_address(cls, v: str):
+        # Basic regex for standard domain structures
+        # 1. Allows alphanumeric characters and hyphens
+        # 2. Ensures no hyphen at the start or end of a segment
+        # 3. Ensures at least one dot
+        # 4. TLD must be at least 2 characters
+        pattern = r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63})+$"
+
+        if re.match(pattern, v):
+            return True
+        return False
+

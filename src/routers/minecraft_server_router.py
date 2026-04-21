@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from dependencies.services import get_docker_server_manager
 
-from services.server_manager import ServerManager
+from services.minecraft.server_manager import ServerManager
 
 from schemas.minecraft_server_config.minecraft_fabric_server_config import (
     MinecraftFabricServerConfig,
