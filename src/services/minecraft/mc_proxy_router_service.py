@@ -40,7 +40,6 @@ class MCProxyRouterService(ProxyRouter):
             async with session.get(f"{ROUTER_API_ADDRESS}/routes") as response:
                 if 200 <= response.status < 300:
                     records: dict[str, dict[str, str]] = await response.json()
-                    print(records.items())
                     for address, data in records.items():
                         if data["backend"] == server_host:
                             server_address = address
