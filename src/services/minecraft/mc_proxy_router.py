@@ -19,9 +19,12 @@ class MCProxyRouter(ProxyRouter):
         # Check if the given server_address is already registered to avoid record override
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{ROUTER_API_ADDRESS}/routes") as response:
-                records: dict[str, dict[str, str]] = await response.json()
-                if server_address in records.keys():
-                    return False # TODO: implement internal codes
+                if 200 <= response.status < 300:
+                    records: dict[str, dict[str, str]] = await response.json()
+                    if server_address in records.keys():
+                        return False # TODO: implement internal codes
+                else:
+                    return False
 
         # Register the record
         async with aiohttp.ClientSession() as session:
@@ -33,14 +36,15 @@ class MCProxyRouter(ProxyRouter):
     async def remove(self, server_host: str) -> bool:
 
         # Find the server address of the given server host
-        server_address: str = ""
+        server_address: str | None = None
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{ROUTER_API_ADDRESS}/routes") as response:
-                records: dict[str, dict[str, str]] = await response.json()
-                print(records.items())
-                for address, data in records.items():
-                    if data["backend"] == server_host:
-                        server_address = address
+                if 200 <= response.status < 300:
+                    records: dict[str, dict[str, str]] = await response.json()
+                    print(records.items())
+                    for address, data in records.items():
+                        if data["backend"] == server_host:
+                            server_address = address
 
         if not server_address:
             return False
