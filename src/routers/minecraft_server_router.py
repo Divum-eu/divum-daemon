@@ -1,15 +1,24 @@
 """
 The router containing Minecraft server-related endpoints.
 """
-from typing import Annotated
+
+from typing import Annotated, Union
+
+from pydantic import Field
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from dependencies.services import get_docker_server_manager
 
-from schemas.minecraft_server_itzg_config import MinecraftServerITZGConfig
-
 from services.server_manager import ServerManager
+
+from schemas.minecraft_server_config.minecraft_fabric_server_config import (
+    MinecraftFabricServerConfig,
+)
+from schemas.minecraft_server_config.minecraft_vanilla_server_config import (
+    MinecraftVanillaServerConfig,
+)
+
 
 DockerServerManagerDependency = Annotated[
     ServerManager, Depends(get_docker_server_manager)
@@ -20,10 +29,15 @@ minecraft_server_router = APIRouter(
     tags=["minecraft_servers"],
 )
 
+MinecraftServerConfig = Annotated[
+    Union[MinecraftVanillaServerConfig, MinecraftFabricServerConfig],
+    Field(discriminator="type"),
+]
+
 
 @minecraft_server_router.post("/", status_code=200)
 async def create_minecraft_server(
-    request: MinecraftServerITZGConfig, server_manager: DockerServerManagerDependency
+    request: MinecraftServerConfig, server_manager: DockerServerManagerDependency
 ):
     """
     The endpoint for Minecraft server creation.
