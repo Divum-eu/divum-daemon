@@ -1,25 +1,27 @@
 from abc import ABC, abstractmethod
 
+from schemas.minecraft_server_status import MinecraftServerStatus
 from schemas.minecraft_server_config.minecraft_server_config import MinecraftServerConfig
 
 class ServerManager(ABC):
-
     @abstractmethod
-    def create(self, config: MinecraftServerConfig) -> str | None:
+    async def create(
+        self, config: MinecraftServerConfig
+    ) -> str | None:
         """Creates a server and return the unique identifier for it"""
         pass
 
     @abstractmethod
-    def status(self, server_id: str) -> str:
-        """Returns the status of an existing instance and it's logs"""
+    async def status(self, server_id: str) -> MinecraftServerStatus:
+        """Returns the status of an existing instance and its logs"""
         pass
 
     @abstractmethod
-    def start(self, server_id: str) -> bool:
+    async def start(self, server_id: str) -> bool:
         """Starts an existing server"""
         pass
 
     @abstractmethod
-    def stop(self, server_id: str) -> bool:
+    async def stop(self, server_id: str) -> bool:
         """Stops an existing server"""
         pass
