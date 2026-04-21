@@ -25,3 +25,8 @@ class ServerManager(ABC):
     async def stop(self, server_id: str) -> bool:
         """Stops an existing server"""
         pass
+
+    @abstractmethod
+    async def remove(self, server_id: str) -> bool:
+        """Removes an existing server"""
+        pass

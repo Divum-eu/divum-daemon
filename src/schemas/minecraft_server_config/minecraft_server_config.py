@@ -38,6 +38,8 @@ class MinecraftServerConfig(BaseModel, ABC):
     pvp: bool = Field(default=True)
     server_name: str = Field(...)
 
+    server_address: str = Field(...)
+
     @abstractmethod
     def export(self) -> dict[str, str]:
         """Converts the config into a dictionary"""

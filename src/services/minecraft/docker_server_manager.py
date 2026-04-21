@@ -20,13 +20,15 @@ from exceptions.docker_container_not_found_exception import (
 )
 from exceptions.docker_image_not_found_exception import DockerImageNotFoundException
 
-from services.server_manager import ServerManager
+from services.minecraft.proxy_router import ProxyRouter
+from services.minecraft.server_manager import ServerManager
 
 from schemas.minecraft_server_status import MinecraftServerStatus, Status
-
 from schemas.minecraft_server_config.minecraft_server_config import MinecraftServerConfig
 
-WORLDS_DIR = os.environ.get("WORLDS_DIR", "..")
+
+WORLDS_DIR = os.environ.get("WORLDS_DIR", "../..")
+DOCKER_NETWORK_NAME = os.environ.get("DOCKER_NETWORK_NAME", "divum-net")
 
 
 # TODO: add logging
@@ -35,9 +37,10 @@ class DockerServerManager(ServerManager):
     The service responsible for handling Minecraft server container instances.
     """
 
-    def __init__(self):
+    def __init__(self, proxy_router: ProxyRouter):
         try:
             self._client = docker.from_env()
+            self._proxy_router: ProxyRouter = proxy_router
         except Exception as err:
             raise ClientAPIException("Couldn't start the Docker client.") from err
 
@@ -65,13 +68,10 @@ class DockerServerManager(ServerManager):
                         "mode": "rw,Z"
                     }
                 },
-                ports={
-                    "25565/tcp": 25565,  # Minecraft Game Port
-                    "25575/tcp": 25575,  # RCON Port
-                },
                 # Bypasses Docker's unstable internal DNS proxy to prevent
                 # UnknownHostExceptions when downloading server.jar or hitting Mojang APIs
                 dns=["8.8.8.8", "1.1.1.1"],
+                network=DOCKER_NETWORK_NAME,
                 detach=True,
             )
 
@@ -81,6 +81,11 @@ class DockerServerManager(ServerManager):
             raise ClientAPIException(
                 f"An error occurred while trying to create a container from image '{MINECRAFT_SERVER_DOCKER_IMAGE}'."
             ) from err
+
+        # Maps to the internal port since mc-router and the server container run on the same docker network
+        if not await self._proxy_router.add(config.server_address, f"{container_name}:25565"):
+            await self.remove(container_name) # TODO: implement internal codes
+            return None
 
         return container.name
 
@@ -136,31 +141,15 @@ class DockerServerManager(ServerManager):
 
         return True
 
-# FOR TESTING
+    async def remove(self, server_id: str) -> bool:
+        try:
+            container: Container = await asyncio.to_thread(
+                self._client.containers.get, server_id
+            )
 
-# manager = DockerServerManager()
-#
-# config: MinecraftServerConfig = MinecraftFabricServerConfig(
-#     memory_limit=2048,
-#     cpu_cores_limit=1,
-#     server_name="dimpex",
-#     type="FABRIC",
-#     eula=True,
-#     difficulty="hard",
-#     mode="creative",
-#     level="swqt",
-#     resource_pack="https://download.mc-packs.net/pack/59eb5f3c13e5a064dae879cce3e4c6aff6bf9b87.zip",
-#     resource_pack_sha1="59eb5f3c13e5a064dae879cce3e4c6aff6bf9b87",
-#     online_mode=False,
-#     enable_whitelist=True,
-#     whitelist=["Dimpex", "Dimitar45"],
-#     rcon_password="123",
-#     version="latest"
-# )
-#
-# name: str | None = manager.create(config)
-# manager.start(name)
-# # manager.stop(config.server_name)
-# status: MinecraftServerStatus = manager.status(name)
-# print(status.status.name)
-# print(status.log)
+            await asyncio.to_thread(container.remove, v=True, force=True)
+
+        except (NotFound, APIError):
+            return False
+
+        return True
