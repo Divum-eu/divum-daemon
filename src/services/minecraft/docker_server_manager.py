@@ -37,6 +37,8 @@ class DockerServerManager(ServerManager):
     The service responsible for handling Minecraft server container instances.
     """
 
+    MC_CONTAINER_PORT: int = 25565
+
     def __init__(self, proxy_router: ProxyRouter):
         try:
             self._client = docker.from_env()
@@ -83,7 +85,7 @@ class DockerServerManager(ServerManager):
             ) from err
 
         # Maps to the internal port since mc-router and the server container run on the same docker network
-        if not await self._proxy_router.add(config.server_address, f"{container_name}:25565"):
+        if not await self._proxy_router.add(config.server_address, f"{container_name}:{self.MC_CONTAINER_PORT}"):
             await self.remove(container_name) # TODO: implement internal codes
             return None
 
@@ -148,6 +150,7 @@ class DockerServerManager(ServerManager):
             )
 
             await asyncio.to_thread(container.remove, v=True, force=True)
+            await self._proxy_router.remove(f"{container.name}:{self.MC_CONTAINER_PORT}")
 
         except (NotFound, APIError):
             return False

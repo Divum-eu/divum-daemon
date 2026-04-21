@@ -30,7 +30,22 @@ class MCProxyRouter(ProxyRouter):
 
                 return 200 <= response.status < 300
 
-    async def remove(self, server_address: str) -> bool:
+    async def remove(self, server_host: str) -> bool:
+
+        # Find the server address of the given server host
+        server_address: str = ""
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{ROUTER_API_ADDRESS}/routes") as response:
+                records: dict[str, dict[str, str]] = await response.json()
+                print(records.items())
+                for address, data in records.items():
+                    if data["backend"] == server_host:
+                        server_address = address
+
+        if not server_address:
+            return False
+
+        # Delete the found server address
         async with aiohttp.ClientSession() as session:
             async with session.delete(f"{ROUTER_API_ADDRESS}/routes/{server_address}") as response:
                 return 200 <= response.status < 300
