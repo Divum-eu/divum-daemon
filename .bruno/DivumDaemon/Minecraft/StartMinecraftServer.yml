@@ -1,0 +1,15 @@
+info:
+  name: StartMinecraftServer
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{address}}/minecraft-servers/38efcd43-9514-4a68-8787-3ef3fcb48748/start"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

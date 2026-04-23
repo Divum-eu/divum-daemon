@@ -1,0 +1,29 @@
+info:
+  name: CreateMinecraftServer
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{address}}/minecraft-servers/"
+  body:
+    type: json
+    data: |-
+      {
+        "server_address": "127.0.0.1",
+        "memory_limit": 2048,
+        "cpu_cores_limit": 0.5,
+        "eula": true,
+        "version": "LATEST",
+        "type": "VANILLA",
+        "rcon_password": "parola",
+        "server_name": "Divum's world",
+        "online_mode": false
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

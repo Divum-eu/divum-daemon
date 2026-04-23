@@ -1,0 +1,4 @@
+name: dev
+variables:
+  - name: address
+    value: http://localhost:8000/api/v1
