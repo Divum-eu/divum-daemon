@@ -160,7 +160,7 @@ class MinecraftServerConfig(BaseModel, ABC):
         # 4. TLD must be at least 2 characters
         pattern = r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63})+$"
 
-        if not re.match(pattern, v) and v != "localhost":
+        if not re.match(pattern, v):
             raise ValueError("Invalid domain.")
         return v
 
