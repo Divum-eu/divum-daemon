@@ -5,7 +5,7 @@ info:
 
 http:
   method: POST
-  url: "{{address}}/minecraft-servers/"
+  url: "{{address}}/{{base_route}}/minecraft-servers/"
   body:
     type: json
     data: |-
