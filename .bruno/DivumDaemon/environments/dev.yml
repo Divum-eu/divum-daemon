@@ -1,0 +1,6 @@
+name: dev
+variables:
+  - name: address
+    value: http://localhost:8000
+  - name: base_route
+    value: api/v1
