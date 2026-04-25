@@ -1,6 +1,9 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import APIRouter, FastAPI
 
-from src.routers.minecraft_server_router import minecraft_server_router
+from routers.minecraft_server_router import minecraft_server_router
 
 app = FastAPI(
     title="DivumDaemon", swagger_ui_parameters={"syntaxHighlight": {"theme": "dracula"}}

@@ -1,0 +1,1 @@
+MINECRAFT_SERVER_DOCKER_IMAGE = "itzg/minecraft-server"
