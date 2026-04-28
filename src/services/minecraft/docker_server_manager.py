@@ -4,6 +4,8 @@ Contains the main service responsible for handling Minecraft server container in
 
 import asyncio
 
+import hashlib
+
 import os
 
 import uuid
@@ -57,6 +59,14 @@ class DockerServerManager(ServerManager):
 
             host_path = os.path.abspath(f"{WORLDS_DIR}/data/{container_name}")
             os.makedirs(host_path)
+
+            # If online mode is disabled and the user wants whitelist functionality, generate offline UUIDs
+            if not config.online_mode and config.whitelist and config.enable_whitelist:
+                new_whitelist: list[str] = []
+                for username in config.whitelist:
+                    new_whitelist.append(self.generate_offline_uuid(username))
+                config.whitelist = new_whitelist
+
 
             container: Container = await asyncio.to_thread(
                 self._client.containers.create,
@@ -156,3 +166,20 @@ class DockerServerManager(ServerManager):
             return False
 
         return True
+
+    @staticmethod
+    def generate_offline_uuid(username: str) -> str:
+        # 1. Create the string
+        data = f"OfflinePlayer:{username}".encode('utf-8')
+
+        # 2. Get the MD5 hash
+        md5_hash = hashlib.md5(data).digest()
+
+        # 3. Apply the UUID version 3 and variant bits
+        # (Setting the 7th byte for version 3, and 9th byte for variant 2)
+        uuid_bytes = bytearray(md5_hash)
+        uuid_bytes[6] = (uuid_bytes[6] & 0x0f) | 0x30  # remove first 4 bits and replace with the number 3 (0x30)
+        uuid_bytes[8] = (uuid_bytes[8] & 0x3f) | 0x80  # remove first 2 bits and replace with the number 8 (0x80)
+
+        # 4. Return as a formatted UUID object/string
+        return str(uuid.UUID(bytes=bytes(uuid_bytes)))

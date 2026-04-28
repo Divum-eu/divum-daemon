@@ -10,15 +10,18 @@ http:
     type: json
     data: |-
       {
-        "server_address": "127.0.0.1",
-        "memory_limit": 2048,
+        "server_address": "127.0.0.2",
+        "memory_limit": 4096,
         "cpu_cores_limit": 0.5,
         "eula": true,
         "version": "LATEST",
         "type": "VANILLA",
         "rcon_password": "parola",
         "server_name": "Divum's world",
-        "online_mode": false
+        "online_mode": false,
+        "mode": "creative",
+        "enable_whitelist": true,
+        "whitelist": ["Dimitar45", "Dimpex"]
       }
   auth: inherit
 
