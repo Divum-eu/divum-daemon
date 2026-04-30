@@ -12,6 +12,7 @@ class MCProxyRouterService(ProxyRouter):
 
     async def add(self, server_address: str, server_host: str) -> bool:
         """Add an entry to the itzg/mc-router hosts"""
+        print("add to router")
 
         if server_address.strip() == "" or server_host.strip() == "":
             return False

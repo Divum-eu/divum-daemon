@@ -73,3 +73,7 @@ async def stop_minecraft_server(id: str, server_manager: DockerServerManagerDepe
 
     if not server_stopped:
         raise HTTPException(404, "Server not found.")
+
+@minecraft_server_router.post("/{id}/update")
+async def update_minecraft_server(id: str, request: MinecraftServerConfig, server_manager: DockerServerManagerDependency):
+    await server_manager.update(id, request)

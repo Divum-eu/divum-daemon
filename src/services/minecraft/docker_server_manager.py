@@ -1,6 +1,9 @@
 """
 Contains the main service responsible for handling Minecraft server container instances.
 """
+from typing import AnyStr
+
+from exceptions.create_container_exception import CreateContainerException
 
 import asyncio
 
@@ -40,6 +43,7 @@ class DockerServerManager(ServerManager):
     """
 
     MC_CONTAINER_PORT: int = 25565
+    HOT_UPDATE_KEYS = {"DIFFICULTY", "MODE"}
 
     def __init__(self, proxy_router: ProxyRouter):
         try:
@@ -51,41 +55,20 @@ class DockerServerManager(ServerManager):
     async def create(self, config: MinecraftServerConfig) -> str | None:
         """Creates an itzg/minecraft-server container with the given configuration"""
         try:
-            await asyncio.to_thread(
-                self._client.images.pull, MINECRAFT_SERVER_DOCKER_IMAGE, tag="latest"
-            )
+            # await asyncio.to_thread(
+            #     self._client.images.pull, MINECRAFT_SERVER_DOCKER_IMAGE, tag="latest"
+            # )
 
             container_name: str = str(uuid.uuid4())
 
             host_path = os.path.abspath(f"{WORLDS_DIR}/data/{container_name}")
             os.makedirs(host_path)
 
-            # If online mode is disabled and the user wants whitelist functionality, generate offline UUIDs
-            if not config.online_mode and config.whitelist and config.enable_whitelist:
-                new_whitelist: list[str] = []
-                for username in config.whitelist:
-                    new_whitelist.append(self.generate_offline_uuid(username))
-                config.whitelist = new_whitelist
+            container: Container | None = await self._create_container(container_name, config, host_path)
 
-
-            container: Container = await asyncio.to_thread(
-                self._client.containers.create,
-                MINECRAFT_SERVER_DOCKER_IMAGE,
-                name=container_name,
-                environment=config.export(),
-                nano_cpus=int(config.cpu_cores_limit * (10 ** 9)), # 1 core = 10 ^ 9
-                volumes={
-                    host_path: {
-                        "bind": "/data",
-                        "mode": "rw,Z"
-                    }
-                },
-                # Bypasses Docker's unstable internal DNS proxy to prevent
-                # UnknownHostExceptions when downloading server.jar or hitting Mojang APIs
-                dns=["8.8.8.8", "1.1.1.1"],
-                network=DOCKER_NETWORK_NAME,
-                detach=True,
-            )
+            if not container:
+                print("No container")
+                return None
 
         except ImageNotFound as ex:
             raise DockerImageNotFoundException(MINECRAFT_SERVER_DOCKER_IMAGE) from ex
@@ -96,10 +79,48 @@ class DockerServerManager(ServerManager):
 
         # Maps to the internal port since mc-router and the server container run on the same docker network
         if not await self._proxy_router.add(config.server_address, f"{container_name}:{self.MC_CONTAINER_PORT}"):
-            await self.remove(container_name) # TODO: implement internal codes
+            await self._remove(container_name, permanently=True, force=True) # TODO: implement internal codes
             return None
 
+        await self.start(container.name)
         return container.name
+
+    async def update(self, server_id: str, new_config: MinecraftServerConfig) -> bool:
+        print("In update")
+        container: Container | None = await self._get_container(server_id)
+        if not container:
+            # TODO: log
+            raise DockerContainerNotFoundException(server_id)
+
+        was_running: bool = container.status == Status.RUNNING
+
+        current_env = {}
+        for env_str in container.attrs["Config"]["Env"]:
+            if "=" in env_str:
+                k, v = env_str.split("=", 1)
+                current_env[k] = v
+
+        new_env = new_config.export()
+
+        changed_keys = [k for k, v in new_env.items() if current_env.get(k) != v]
+
+        requires_restart = any(key not in self.HOT_UPDATE_KEYS for key in changed_keys)
+
+        pending_path = os.path.abspath(f"{WORLDS_DIR}/data/{server_id}/.pending_config.json")
+        if requires_restart or not was_running:
+            print("In requires restart or not was_running")
+            pending_path = os.path.abspath(f"{WORLDS_DIR}/data/{server_id}/.pending_config.json")
+            if os.path.exists(pending_path):
+                os.remove(pending_path)
+
+            return await self._recreate_container(server_id, new_config, was_running)
+
+        await self._apply_live_patches(server_id, new_config)
+        with open(pending_path, "w") as f:
+            f.write(new_config.model_dump_json())
+
+        return True
+
 
     async def status(self, server_id: str) -> MinecraftServerStatus:
         try:
@@ -128,10 +149,12 @@ class DockerServerManager(ServerManager):
             ) from err
 
     async def start(self, server_id: str) -> bool:
+        print("Start container")
         try:
-            container: Container = await asyncio.to_thread(
-                self._client.containers.get, server_id
-            )
+            container: Container | None = await self._get_container(server_id)
+
+            if not container:
+                raise DockerContainerNotFoundException
 
             await asyncio.to_thread(container.start)
 
@@ -142,9 +165,10 @@ class DockerServerManager(ServerManager):
 
     async def stop(self, server_id: str) -> bool:
         try:
-            container: Container = await asyncio.to_thread(
-                self._client.containers.get, server_id
-            )
+            container: Container | None = await self._get_container(server_id)
+
+            if not container:
+                return False
 
             await asyncio.to_thread(container.stop)
 
@@ -153,19 +177,106 @@ class DockerServerManager(ServerManager):
 
         return True
 
-    async def remove(self, server_id: str) -> bool:
+    async def delete(self, server_id: str) -> bool:
+        return await self._remove(server_id, True, True)
+
+    async def _remove(self, server_id: str, permanently: bool, force: bool) -> bool:
         try:
             container: Container = await asyncio.to_thread(
                 self._client.containers.get, server_id
             )
 
-            await asyncio.to_thread(container.remove, v=True, force=True)
-            await self._proxy_router.remove(f"{container.name}:{self.MC_CONTAINER_PORT}")
+            await asyncio.to_thread(container.remove, v=permanently, force=force)
+            await self._proxy_router.remove(f"{container.name}")
 
         except (NotFound, APIError):
             return False
 
         return True
+
+    async def _get_container(self, server_id: str) -> Container | None:
+        try:
+            container: Container = await asyncio.to_thread(
+                self._client.containers.get, server_id
+            )
+            return container
+        except (NotFound, APIError):
+            return None
+
+    async def _recreate_container(self, server_id: str, new_config: MinecraftServerConfig, was_running: bool) -> bool:
+        print("In recreate container")
+        await self.stop(server_id)
+        await self._remove(server_id, permanently=False, force=True)
+
+        if not new_config.online_mode and new_config.whitelist and new_config.enable_whitelist:
+            new_config.whitelist = [self.generate_offline_uuid(u) for u in new_config.whitelist]
+
+        host_path = os.path.abspath(f"{WORLDS_DIR}/data/{server_id}")
+
+        new_container: Container | None = await self._create_container(server_id, new_config, host_path)
+        if not new_container:
+            raise CreateContainerException
+
+        await self._proxy_router.add(new_config.server_address, f"{new_container.name}:{self.MC_CONTAINER_PORT}")
+
+        if was_running:
+            await self.start(server_id)
+
+        return True
+
+    async def _create_container(self, server_id: str, config: MinecraftServerConfig, host_path: AnyStr) -> Container | None:
+        print("in create container")
+        try:
+            print(config.export())
+            new_container: Container = await asyncio.to_thread(
+                self._client.containers.create,
+                MINECRAFT_SERVER_DOCKER_IMAGE,
+                name=server_id,
+                environment=config.export(),
+                nano_cpus=int(config.cpu_cores_limit * (10 ** 9)),
+                volumes={host_path: {"bind": "/data", "mode": "rw,Z"}},
+                dns=["8.8.8.8", "1.1.1.1"],
+                network=DOCKER_NETWORK_NAME,
+                labels={
+                    # Needed for itzg/mc-router to be able to see the container and automatically scale it
+                    "mc-router.host": config.server_address
+                },
+                detach=True,
+            )
+            return new_container
+        except ImageNotFound:
+            try:
+                print("pulling image")
+                await asyncio.to_thread(self._client.images.pull,
+                                        MINECRAFT_SERVER_DOCKER_IMAGE,
+                                        tag="latest"
+                                        )
+
+                print("image pulled")
+                return await self._create_container(server_id, config, host_path)
+            except APIError:
+                return None
+
+        except APIError as err:
+            return None
+
+    async def _apply_live_patches(self, server_id: str, new_config: MinecraftServerConfig) -> bool:
+        container: Container | None = await asyncio.to_thread(
+            self._client.containers.get, server_id
+        )
+        print(new_config.export())
+
+        json_config = new_config.export()
+
+        async def run_rcon(command: str):
+            await asyncio.to_thread(container.exec_run, f"rcon-cli {command.lower()}")
+
+        if "DIFFICULTY" in json_config:
+            await run_rcon(f"difficulty {new_config.difficulty}")
+
+        if "MODE" in json_config:
+            await run_rcon(f"defaultgamemode {new_config.mode}")
+            await run_rcon(f"gamemode {new_config.mode} @a")
 
     @staticmethod
     def generate_offline_uuid(username: str) -> str:

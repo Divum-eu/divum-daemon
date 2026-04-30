@@ -17,6 +17,7 @@ class MinecraftServerConfig(BaseModel, ABC):
     motd: str = Field(default="Brought to you by Divum. Enjoy!")
     difficulty: str = Field(default="easy")
     mode: str = Field(default="survival")
+    force_gamemode: bool = Field(default=False)
     level: str = Field(default="world")
     online_mode: bool = Field(default=True)
 
@@ -53,6 +54,7 @@ class MinecraftServerConfig(BaseModel, ABC):
             "MOTD": self.motd,
             "DIFFICULTY": self.difficulty,
             "MODE": self.mode,
+            "FORCE_GAMEMODE": "TRUE" if self.force_gamemode else "FALSE",
             "LEVEL": self.level,
             "ONLINE_MODE": "TRUE" if self.online_mode else "FALSE",
 
