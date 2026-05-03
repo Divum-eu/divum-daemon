@@ -10,9 +10,9 @@ http:
     type: json
     data: |-
       {
-        "server_address": "127.0.0.2",
+        "server_address": "192.168.0.163",
         "memory_limit": 4096,
-        "cpu_cores_limit": 2,
+        "cpu_cores_limit": 0.5,
         "eula": true,
         "version": "LATEST",
         "type": "VANILLA",
