@@ -10,16 +10,18 @@ http:
     type: json
     data: |-
       {
-        "server_address": "192.168.0.163",
+        "server_address": "127.0.0.2",
         "memory_limit": 4096,
-        "cpu_cores_limit": 0.5,
+        "cpu_cores_limit": 3,
         "eula": true,
         "version": "LATEST",
         "type": "VANILLA",
         "rcon_password": "parola",
         "server_name": "Divum's world",
         "online_mode": false,
-        "mode": "creative"
+        "mode": "survival",
+        "enable_whitelist": true,
+        "whitelist": ["Dimpex0"]
       }
   auth: inherit
 

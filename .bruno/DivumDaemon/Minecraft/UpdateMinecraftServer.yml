@@ -5,21 +5,23 @@ info:
 
 http:
   method: POST
-  url: "{{address}}/{{base_route}}/minecraft-servers/2bf0025e-b3e2-4a10-993a-417a612a209d/update"
+  url: "{{address}}/{{base_route}}/minecraft-servers/5129f5fe-a530-4821-8a70-f14ff7204678/update"
   body:
     type: json
     data: |-
       {
         "server_address": "127.0.0.2",
         "memory_limit": 4096,
-        "cpu_cores_limit": 1,
+        "cpu_cores_limit": 3,
         "eula": true,
         "version": "LATEST",
         "type": "VANILLA",
         "rcon_password": "parola",
         "server_name": "Divum's world",
         "online_mode": false,
-        "mode": "creative"
+        "mode": "survival",
+        "enable_whitelist": true,
+        "whitelist": ["Dimitar45", "Dimpex0"]
       }
   auth: inherit
 

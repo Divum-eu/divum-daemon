@@ -27,7 +27,7 @@ class MinecraftServerConfig(BaseModel, ABC):
 
     enable_whitelist: bool = Field(default=False)
     whitelist: list[str] = Field(default=[])
-    override_whitelist: bool = Field(default=False)
+    override_whitelist: bool = Field(default=True) # recommended to keep at True, else might brake logic
 
     enable_rcon: bool = Field(default=True)
     rcon_password: str = Field(...)
