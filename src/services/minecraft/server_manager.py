@@ -27,6 +27,10 @@ class ServerManager(ABC):
         pass
 
     @abstractmethod
-    async def remove(self, server_id: str) -> bool:
-        """Removes an existing server"""
+    async def update(self, server_id: str, new_config: MinecraftServerConfig) -> bool:
+        pass
+
+    @abstractmethod
+    async def delete(self, server_id: str) -> bool:
+        """Deletes an existing server"""
         pass

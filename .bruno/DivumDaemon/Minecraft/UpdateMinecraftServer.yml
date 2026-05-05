@@ -1,11 +1,11 @@
 info:
-  name: CreateMinecraftServer
+  name: UpdateMinecraftServer
   type: http
-  seq: 1
+  seq: 4
 
 http:
   method: POST
-  url: "{{address}}/{{base_route}}/minecraft-servers/"
+  url: "{{address}}/{{base_route}}/minecraft-servers/df77235e-1c38-40df-be57-d95b866f0fdd/update"
   body:
     type: json
     data: |-
@@ -18,10 +18,10 @@ http:
         "type": "VANILLA",
         "rcon_password": "parola",
         "server_name": "Divum's world",
-        "online_mode": false,
+        "online_mode": true,
         "mode": "survival",
         "enable_whitelist": true,
-        "whitelist": ["Dimpex0"]
+        "whitelist": ["Dimitar45", "Dimpex0"]
       }
   auth: inherit
 
