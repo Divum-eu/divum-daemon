@@ -302,16 +302,13 @@ class DockerServerManager(ServerManager):
                 return False
 
         if "DIFFICULTY" in changed_key:
-            print("DIFFICULTY")
             await run_rcon(f"difficulty {new_config.difficulty}")
 
         if "MODE" in changed_key:
-            print("MODE")
             await run_rcon(f"defaultgamemode {new_config.mode}")
             await run_rcon(f"gamemode {new_config.mode} @a")
 
         if "WHITELIST" in changed_key:
-            print("WHITELIST")
             # Enforce the whitelist
             if new_config.enable_whitelist:
                 await run_rcon("whitelist on")

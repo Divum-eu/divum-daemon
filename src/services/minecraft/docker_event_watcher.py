@@ -6,7 +6,7 @@ import threading
 import docker
 from pydantic import TypeAdapter
 
-from schemas.minecraft_server_config.minecraft_server_config import MinecraftServerConfig
+from routers.minecraft_server_router import MinecraftServerConfig
 from services.minecraft.server_manager import ServerManager
 
 WORLDS_DIR = os.getenv("WORLDS_DIR", "../..")
@@ -33,7 +33,6 @@ class DockerEventWatcher:
             pending_path = os.path.abspath(f"{WORLDS_DIR}/data/{container_name}/.pending_config.json")
 
             if os.path.exists(pending_path):
-                print(f"Applying pending config for sleeping server: {container_name}")
                 try:
                     with open(pending_path, "r") as f:
                         config_data = f.read()
