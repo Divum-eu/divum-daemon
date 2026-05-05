@@ -51,12 +51,12 @@ class MCProxyRouterService(ProxyRouter):
                             if data["backend"] == server_host:
                                 server_address = address
 
-            if not server_address:
-                return False
+                if not server_address:
+                    return False
 
-            # Delete the found server address
-            async with session.delete(f"{ROUTER_API_ADDRESS}/routes/{server_address}") as response:
-                return 200 <= response.status < 300
+                # Delete the found server address
+                async with session.delete(f"{ROUTER_API_ADDRESS}/routes/{server_address}") as response:
+                    return 200 <= response.status < 300
         except ClientConnectionError:
             # TODO: log mc-router not working
             return False

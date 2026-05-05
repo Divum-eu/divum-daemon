@@ -6,7 +6,7 @@ import threading
 import docker
 from pydantic import TypeAdapter
 
-from routers.minecraft_server_router import MinecraftServerConfig
+from schemas.minecraft_server_config.minecraft_server_config import MinecraftServerConfig
 from services.minecraft.server_manager import ServerManager
 
 WORLDS_DIR = os.getenv("WORLDS_DIR", "../..")

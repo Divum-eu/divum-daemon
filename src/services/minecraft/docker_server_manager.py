@@ -2,6 +2,7 @@
 Contains the main service responsible for handling Minecraft server container instances.
 """
 import json
+import shutil
 from typing import AnyStr
 
 import aiofiles
@@ -72,7 +73,11 @@ class DockerServerManager(ServerManager):
                 os.rmdir(host_path)
             return None
 
-        await self.start(container_name)
+        # If can't start container, delete it for a clean retry
+        if not await self.start(container_name):
+            await self.delete(container_name)
+            return None
+
         return container.name
 
 
@@ -102,7 +107,7 @@ class DockerServerManager(ServerManager):
 
         # Checks if the cpu limit has been changed
         cpu_limit_changed: bool = (
-                new_config.cpu_cores_limit * DOCKER_CONTAINER_CPU_MULTIPLIER != container.attrs["HostConfig"].get("NanoCpus")
+                int(new_config.cpu_cores_limit * DOCKER_CONTAINER_CPU_MULTIPLIER) != container.attrs["HostConfig"].get("NanoCpus")
         )
 
         requires_restart: bool = (any(key not in self.HOT_UPDATE_KEYS for key in changed_keys)
@@ -115,11 +120,12 @@ class DockerServerManager(ServerManager):
             if os.path.exists(pending_path):
                 os.remove(pending_path)
 
-            online_mode_changed: bool = current_env["ONLINE_MODE"] != new_config.online_mode
+            # current_env["ONLINE_MODE"] returns a string "TRUE" or "FALSE"
+            online_mode_changed: bool = current_env["ONLINE_MODE"] != new_env["ONLINE_MODE"]
             return await self._recreate_container(server_id, new_config, online_mode_changed, was_running)
 
         # Generate a .pending_config.json file to be applied on server stop
-        await self._apply_live_patches(server_id, new_config)
+        await self._apply_live_patches(server_id, new_config, changed_keys)
         async with aiofiles.open(pending_path, "w") as f:
             await f.write(new_config.model_dump_json())
 
@@ -158,7 +164,7 @@ class DockerServerManager(ServerManager):
             container: Container | None = await self._get_container(server_id)
 
             if not container:
-                raise DockerContainerNotFoundException
+                return False
 
             await asyncio.to_thread(container.start)
 
@@ -197,7 +203,7 @@ class DockerServerManager(ServerManager):
             if permanently:
                 host_path = os.path.abspath(f"{WORLDS_DIR}/data/{server_id}")
                 if os.path.exists(host_path):
-                    os.rmdir(host_path)
+                    shutil.rmtree(host_path)
 
         except (NotFound, APIError):
             return False
@@ -282,26 +288,30 @@ class DockerServerManager(ServerManager):
         return True
 
 
-    async def _apply_live_patches(self, server_id: str, new_config: MinecraftServerConfig) -> bool:
-        container: Container | None = await asyncio.to_thread(
-            self._client.containers.get, server_id
-        )
+    async def _apply_live_patches(self, server_id: str, new_config: MinecraftServerConfig, changed_key: list[str]) -> bool:
+        container: Container | None = await self._get_container(server_id)
         if not container:
             return False
 
         json_config = new_config.export()
 
         async def run_rcon(command: str):
-            await asyncio.to_thread(container.exec_run, f"rcon-cli {command}")
+            try:
+                await asyncio.to_thread(container.exec_run, f"rcon-cli {command}")
+            except APIError:
+                return False
 
-        if "DIFFICULTY" in json_config:
+        if "DIFFICULTY" in changed_key:
+            print("DIFFICULTY")
             await run_rcon(f"difficulty {new_config.difficulty}")
 
-        if "MODE" in json_config:
+        if "MODE" in changed_key:
+            print("MODE")
             await run_rcon(f"defaultgamemode {new_config.mode}")
             await run_rcon(f"gamemode {new_config.mode} @a")
 
-        if "WHITELIST" in json_config:
+        if "WHITELIST" in changed_key:
+            print("WHITELIST")
             # Enforce the whitelist
             if new_config.enable_whitelist:
                 await run_rcon("whitelist on")
@@ -436,5 +446,5 @@ class DockerServerManager(ServerManager):
                     return str(uuid.UUID(data["id"]))
 
         except ClientConnectionError:
-            # TODO: log mc-router not working
+            # TODO: log mojang api call failed
             return None

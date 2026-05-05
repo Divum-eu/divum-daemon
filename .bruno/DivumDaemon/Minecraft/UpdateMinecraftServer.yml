@@ -5,7 +5,7 @@ info:
 
 http:
   method: POST
-  url: "{{address}}/{{base_route}}/minecraft-servers/5129f5fe-a530-4821-8a70-f14ff7204678/update"
+  url: "{{address}}/{{base_route}}/minecraft-servers/df77235e-1c38-40df-be57-d95b866f0fdd/update"
   body:
     type: json
     data: |-
@@ -18,7 +18,7 @@ http:
         "type": "VANILLA",
         "rcon_password": "parola",
         "server_name": "Divum's world",
-        "online_mode": false,
+        "online_mode": true,
         "mode": "survival",
         "enable_whitelist": true,
         "whitelist": ["Dimitar45", "Dimpex0"]
