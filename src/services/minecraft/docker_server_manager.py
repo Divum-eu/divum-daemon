@@ -3,9 +3,12 @@ Contains the main service responsible for handling Minecraft server container in
 """
 import json
 import shutil
+import time
 from typing import AnyStr
 
 import aiofiles
+import aiofiles.os
+
 import aiohttp
 from aiohttp import ClientConnectionError
 
@@ -63,20 +66,24 @@ class DockerServerManager(ServerManager):
         container_name: str = str(uuid.uuid4())
 
         host_path = os.path.abspath(f"{WORLDS_DIR}/data/{container_name}")
-        os.makedirs(host_path)
+        await aiofiles.os.makedirs(host_path)
 
         container: Container | None = await self._create_container(container_name, config, host_path)
 
         # remove the created the folder if creation failed
         if not container:
             if os.path.exists(host_path):
-                os.rmdir(host_path)
+                await aiofiles.os.rmdir(host_path)
+
             return None
 
         # If can't start container, delete it for a clean retry
         if not await self.start(container_name):
             await self.delete(container_name)
             return None
+
+        print("Hi")
+        await self._remove(container_name, permanently=True, force=True)
 
         return container.name
 
@@ -118,7 +125,7 @@ class DockerServerManager(ServerManager):
         if requires_restart or not was_running:
             pending_path = os.path.abspath(f"{WORLDS_DIR}/data/{server_id}/.pending_config.json")
             if os.path.exists(pending_path):
-                os.remove(pending_path)
+                await aiofiles.os.remove(pending_path)
 
             # current_env["ONLINE_MODE"] returns a string "TRUE" or "FALSE"
             online_mode_changed: bool = current_env["ONLINE_MODE"] != new_env["ONLINE_MODE"]
@@ -146,8 +153,8 @@ class DockerServerManager(ServerManager):
                 f"{WORLDS_DIR}/data/{container.name}/logs/latest.log"
             )
             if os.path.exists(host_path):
-                with open(host_path, "r") as log_file:
-                    log = log_file.read()
+                async with aiofiles.open(host_path, "r") as f:
+                    log = await f.read()
 
             return MinecraftServerStatus(status=Status(value=status), log=log)
 
@@ -203,7 +210,7 @@ class DockerServerManager(ServerManager):
             if permanently:
                 host_path = os.path.abspath(f"{WORLDS_DIR}/data/{server_id}")
                 if os.path.exists(host_path):
-                    shutil.rmtree(host_path)
+                    await asyncio.to_thread(shutil.rmtree, host_path)
 
         except (NotFound, APIError):
             return False
@@ -231,7 +238,7 @@ class DockerServerManager(ServerManager):
             for file_name in poisoned_files:
                 file_path = os.path.join(f"{WORLDS_DIR}/data/{server_id}", file_name)
                 if os.path.exists(file_path):
-                    os.remove(file_path)
+                    await aiofiles.os.remove(file_path)
 
         host_path = os.path.abspath(f"{WORLDS_DIR}/data/{server_id}")
 
@@ -247,7 +254,7 @@ class DockerServerManager(ServerManager):
     async def _create_container(self, server_id: str, config: MinecraftServerConfig, host_path: AnyStr) -> Container | None:
         try:
             if not config.online_mode and config.whitelist and config.enable_whitelist:
-                config.whitelist = [self.generate_offline_uuid(username) for username in config.whitelist]
+                config.whitelist = [self._generate_offline_uuid(username) for username in config.whitelist]
 
             new_container: Container = await asyncio.to_thread(
                 self._client.containers.create,
@@ -288,41 +295,37 @@ class DockerServerManager(ServerManager):
         return True
 
 
-    async def _apply_live_patches(self, server_id: str, new_config: MinecraftServerConfig, changed_key: list[str]) -> bool:
+    async def _apply_live_patches(self, server_id: str, new_config: MinecraftServerConfig, changed_keys: list[str]) -> bool:
         container: Container | None = await self._get_container(server_id)
         if not container:
             return False
 
-        json_config = new_config.export()
+        if "DIFFICULTY" in changed_keys:
+            await self._run_rcon(container, f"difficulty {new_config.difficulty}")
 
-        async def run_rcon(command: str):
-            try:
-                await asyncio.to_thread(container.exec_run, f"rcon-cli {command}")
-            except APIError:
-                return False
+        if "MODE" in changed_keys:
+            await self._run_rcon(container, f"defaultgamemode {new_config.mode}")
+            await self._run_rcon(container, f"gamemode {new_config.mode} @a")
 
-        if "DIFFICULTY" in changed_key:
-            await run_rcon(f"difficulty {new_config.difficulty}")
-
-        if "MODE" in changed_key:
-            await run_rcon(f"defaultgamemode {new_config.mode}")
-            await run_rcon(f"gamemode {new_config.mode} @a")
-
-        if "WHITELIST" in changed_key:
+        if "WHITELIST" in changed_keys:
             # Enforce the whitelist
             if new_config.enable_whitelist:
-                await run_rcon("whitelist on")
+                await self._run_rcon(container, "whitelist on")
             else:
-                await run_rcon("whitelist off")
+                await self._run_rcon(container, "whitelist off")
+
+            # Set the uuid generation strategy
+            if new_config.online_mode:
+                get_uuid_strategy = self._get_premium_uuid
+            else:
+                async def get_uuid_strategy(username: str):
+                    return self._generate_offline_uuid(username)
 
             # Build the JSON data
             whitelist_data = []
             if new_config.whitelist:
                 for name in new_config.whitelist:
-                    if new_config.online_mode:
-                        player_uuid = await self.get_premium_uuid(name)
-                    else:
-                        player_uuid = self.generate_offline_uuid(name)
+                    player_uuid = await get_uuid_strategy(name)
 
                     if player_uuid:
                         whitelist_data.append({"uuid": player_uuid, "name": name})
@@ -333,15 +336,25 @@ class DockerServerManager(ServerManager):
                 await f.write(json.dumps(whitelist_data, indent=2))
 
             # Force the server to read the newly created file
-            await run_rcon("whitelist reload")
+            await self._run_rcon(container, "whitelist reload")
 
         return True
 
+    @staticmethod
+    async def _run_rcon(container: Container, command: str) -> bool:
+        if container is None:
+            return False
+
+        try:
+            await asyncio.to_thread(container.exec_run, f"rcon-cli {command}")
+            return True
+        except APIError:
+            return False
 
     async def _migrate_all_players(self, server_id: str, changing_to_online_mode: bool):
         """Finds all known players and bulk-migrates their data"""
 
-        usernames = await self.get_all_known_usernames(server_id)
+        usernames = await self._get_all_known_usernames(server_id)
 
         if not usernames:
             return
@@ -353,8 +366,8 @@ class DockerServerManager(ServerManager):
     async def _migrate_player_data(self, server_id: str, username: str, changing_to_online_mode: bool) -> bool:
         """Migrate a player's save files between offline and online UUIDs"""
 
-        offline_uuid = self.generate_offline_uuid(username)
-        premium_uuid = await self.get_premium_uuid(username)
+        offline_uuid = self._generate_offline_uuid(username)
+        premium_uuid = await self._get_premium_uuid(username)
 
         if not premium_uuid:
             return False
@@ -379,14 +392,15 @@ class DockerServerManager(ServerManager):
                 if os.path.exists(src_file):
                     if os.path.exists(dst_file):
                         os.remove(dst_file)
+                        await aiofiles.os.remove(dst_file)
 
-                    os.rename(src_file, dst_file)
+                    await aiofiles.os.rename(src_file, dst_file)
 
         return True
 
 
     @staticmethod
-    async def get_all_known_usernames(server_id: str) -> list[str]:
+    async def _get_all_known_usernames(server_id: str) -> list[str]:
         """Reads the server's usercache.json to find every unique username"""
 
         cache_path = os.path.abspath(f"{WORLDS_DIR}/data/{server_id}/usercache.json")
@@ -410,7 +424,7 @@ class DockerServerManager(ServerManager):
 
 
     @staticmethod
-    def generate_offline_uuid(username: str) -> str:
+    def _generate_offline_uuid(username: str) -> str:
         # 1. Create the string
         data = f"OfflinePlayer:{username}".encode('utf-8')
 
@@ -428,7 +442,7 @@ class DockerServerManager(ServerManager):
 
 
     @staticmethod
-    async def get_premium_uuid(username: str) -> str | None:
+    async def _get_premium_uuid(username: str) -> str | None:
         """Fetches the official Mojang UUID for a purchased account"""
 
         try:
