@@ -82,7 +82,6 @@ class DockerServerManager(ServerManager):
             await self.delete(container_name)
             return None
 
-        print("Hi")
         await self._remove(container_name, permanently=True, force=True)
 
         return container.name
