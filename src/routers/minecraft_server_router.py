@@ -41,7 +41,7 @@ async def create_minecraft_server(
     server_id: str | None = await server_manager.create(request)
 
     if not server_id:
-        raise HTTPException(500, "Server could not be created.")
+        raise HTTPException(500, "A Minecraft server instance could not be created.")
 
     return server_id
 
@@ -56,7 +56,7 @@ async def start_minecraft_server(
     server_started: bool = await server_manager.start(id)
 
     if not server_started:
-        raise HTTPException(404, "Server not found.")
+        raise HTTPException(404, "No Minecraft server instance exists with the given ID.")
     return
 
 
@@ -68,7 +68,7 @@ async def stop_minecraft_server(id: str, server_manager: DockerServerManagerDepe
     server_stopped: bool = await server_manager.stop(id)
 
     if not server_stopped:
-        raise HTTPException(404, "Server not found.")
+        raise HTTPException(404, "No Minecraft server instance exists with the given ID.")
 
 
 @minecraft_server_router.patch("/{id}", status_code=204)
@@ -80,7 +80,12 @@ async def update_minecraft_server(
     """
     The endpoint for updating a Minecraft server instance's configuration.
     """
-    await server_manager.update(id, request)
+    was_successful: bool = await server_manager.update(id, request)
+
+    if not was_successful:
+        raise HTTPException(
+            404, "No Minecraft server instance exists with the given ID."
+        )
 
 
 @minecraft_server_router.delete("/{id}", status_code=204)
@@ -90,5 +95,7 @@ async def delete_minecraft_server(
     """The endpoint for deleting a Minecraft server instance."""
     was_successful: bool = await server_manager.delete(id)
 
-    if (not was_successful):
-        raise HTTPException(404)
+    if not was_successful:
+        raise HTTPException(
+            404, "No Minecraft server instance exists with the given ID."
+        )
