@@ -201,9 +201,10 @@ class DockerServerManager(ServerManager):
 
     async def _remove(self, server_id: str, permanently: bool, force: bool) -> bool:
         try:
-            container: Container = await asyncio.to_thread(
-                self._client.containers.get, server_id
-            )
+            container: Container | None = await self._get_container(server_id)
+
+            if not container:
+                return False
 
             await asyncio.to_thread(container.remove, v=permanently, force=force)
             if permanently:
