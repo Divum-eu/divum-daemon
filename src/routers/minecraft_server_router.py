@@ -73,3 +73,14 @@ async def stop_minecraft_server(id: str, server_manager: DockerServerManagerDepe
 @minecraft_server_router.post("/{id}/update")
 async def update_minecraft_server(id: str, request: MinecraftServerConfig, server_manager: DockerServerManagerDependency):
     await server_manager.update(id, request)
+
+
+@minecraft_server_router.delete("/{id}", status_code=204)
+async def delete_minecraft_server(
+    id: str, server_manager: DockerServerManagerDependency
+):
+    """The endpoint for deleting a Minecraft server instance."""
+    was_successful: bool = await server_manager.delete(id)
+
+    if (not was_successful):
+        raise HTTPException(404)
