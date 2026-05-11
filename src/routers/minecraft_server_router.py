@@ -4,21 +4,17 @@ The router containing Minecraft server-related endpoints.
 
 from typing import Annotated, Union
 
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import Field
 
-from fastapi import APIRouter, Depends, HTTPException
-
 from dependencies.services import get_docker_server_manager
-
-from services.minecraft.server_manager import ServerManager
-
 from schemas.minecraft_server_config.minecraft_fabric_server_config import (
     MinecraftFabricServerConfig,
 )
 from schemas.minecraft_server_config.minecraft_vanilla_server_config import (
     MinecraftVanillaServerConfig,
 )
-
+from services.minecraft.server_manager import ServerManager
 
 DockerServerManagerDependency = Annotated[
     ServerManager, Depends(get_docker_server_manager)
@@ -73,3 +69,7 @@ async def stop_minecraft_server(id: str, server_manager: DockerServerManagerDepe
 
     if not server_stopped:
         raise HTTPException(404, "Server not found.")
+
+@minecraft_server_router.post("/{id}/update")
+async def update_minecraft_server(id: str, request: MinecraftServerConfig, server_manager: DockerServerManagerDependency):
+    await server_manager.update(id, request)
