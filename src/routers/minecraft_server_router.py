@@ -21,7 +21,7 @@ DockerServerManagerDependency = Annotated[
 ]
 
 minecraft_server_router = APIRouter(
-    prefix="/minecraft-servers",
+    prefix="/v1/minecraft-servers",
     tags=["minecraft_servers"],
 )
 
@@ -31,7 +31,7 @@ MinecraftServerConfig = Annotated[
 ]
 
 
-@minecraft_server_router.post("/", status_code=200)
+@minecraft_server_router.post("", status_code=200)
 async def create_minecraft_server(
     request: MinecraftServerConfig, server_manager: DockerServerManagerDependency
 ):
@@ -46,12 +46,12 @@ async def create_minecraft_server(
     return server_id
 
 
-@minecraft_server_router.post("/{id}/start", status_code=200)
+@minecraft_server_router.post("/{id}/start", status_code=202)
 async def start_minecraft_server(
     id: str, server_manager: DockerServerManagerDependency
 ):
     """
-    The endpoint for starting Minecraft server containers.
+    The endpoint for starting Minecraft server.
     """
     server_started: bool = await server_manager.start(id)
 
@@ -60,18 +60,26 @@ async def start_minecraft_server(
     return
 
 
-@minecraft_server_router.post("/{id}/stop")
+@minecraft_server_router.post("/{id}/stop", status_code=202)
 async def stop_minecraft_server(id: str, server_manager: DockerServerManagerDependency):
     """
-    The endpoint for stopping Minecraft server containers.
+    The endpoint for stopping Minecraft server.
     """
     server_stopped: bool = await server_manager.stop(id)
 
     if not server_stopped:
         raise HTTPException(404, "Server not found.")
 
-@minecraft_server_router.post("/{id}/update")
-async def update_minecraft_server(id: str, request: MinecraftServerConfig, server_manager: DockerServerManagerDependency):
+
+@minecraft_server_router.patch("/{id}", status_code=204)
+async def update_minecraft_server(
+    id: str,
+    request: MinecraftServerConfig,
+    server_manager: DockerServerManagerDependency,
+):
+    """
+    The endpoint for updating a Minecraft server instance's configuration.
+    """
     await server_manager.update(id, request)
 
 

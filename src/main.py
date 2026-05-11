@@ -28,7 +28,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-main_router = APIRouter(prefix="/api/v1")
+main_router = APIRouter(prefix="/api")
 main_router.include_router(minecraft_server_router)
 
 app.include_router(main_router)
