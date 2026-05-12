@@ -3,7 +3,6 @@ Contains the main service responsible for handling Minecraft server container in
 """
 import json
 import shutil
-import time
 from typing import AnyStr
 
 import aiofiles
@@ -81,8 +80,6 @@ class DockerServerManager(ServerManager):
         if not await self.start(container_name):
             await self.delete(container_name)
             return None
-
-        await self._remove(container_name, permanently=True, force=True)
 
         return container.name
 
