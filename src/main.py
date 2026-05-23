@@ -12,6 +12,7 @@ from services.minecraft.docker_event_watcher import DockerEventWatcher
 from fastapi import APIRouter, FastAPI
 
 from routers.minecraft_server_router import minecraft_server_router
+from routers.ws_status_router import ws_status_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -32,3 +33,4 @@ main_router = APIRouter(prefix="/api")
 main_router.include_router(minecraft_server_router)
 
 app.include_router(main_router)
+app.include_router(ws_status_router)
