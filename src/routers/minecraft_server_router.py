@@ -110,13 +110,15 @@ async def delete_minecraft_server(
 async def get_minecraft_server_status(
     websocket: WebSocket, id: str, server_manager: DockerServerManagerDependency
 ):
+    """A websocket endpoint for sending server status every three seconds."""
+
     await websocket.accept()
 
     try:
         while True:
-            status = await server_manager.status(id)
+            status = await server_manager.get_status(id)
 
-            await websocket.send_json(status)
+            await websocket.send_json(status.model_dump())
 
             await asyncio.sleep(3)
     except WebSocketDisconnect:
