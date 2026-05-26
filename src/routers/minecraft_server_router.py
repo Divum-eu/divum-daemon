@@ -2,9 +2,10 @@
 The router containing Minecraft server-related endpoints.
 """
 
+import asyncio
 from typing import Annotated, Union
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import Field
 
 from dependencies.services import get_docker_server_manager
@@ -56,7 +57,9 @@ async def start_minecraft_server(
     server_started: bool = await server_manager.start(id)
 
     if not server_started:
-        raise HTTPException(404, "No Minecraft server instance exists with the given ID.")
+        raise HTTPException(
+            404, "No Minecraft server instance exists with the given ID."
+        )
     return
 
 
@@ -68,7 +71,9 @@ async def stop_minecraft_server(id: str, server_manager: DockerServerManagerDepe
     server_stopped: bool = await server_manager.stop(id)
 
     if not server_stopped:
-        raise HTTPException(404, "No Minecraft server instance exists with the given ID.")
+        raise HTTPException(
+            404, "No Minecraft server instance exists with the given ID."
+        )
 
 
 @minecraft_server_router.patch("/{id}", status_code=204)
@@ -99,3 +104,20 @@ async def delete_minecraft_server(
         raise HTTPException(
             404, "No Minecraft server instance exists with the given ID."
         )
+
+
+@minecraft_server_router.websocket("/{id}/status/ws")
+async def get_minecraft_server_status(
+    websocket: WebSocket, id: str, server_manager: DockerServerManagerDependency
+):
+    await websocket.accept()
+
+    try:
+        while True:
+            status = await server_manager.status(id)
+
+            await websocket.send_json(status)
+
+            await asyncio.sleep(3)
+    except WebSocketDisconnect:
+        pass
