@@ -163,13 +163,36 @@ class DockerMinecraftServerManager(MinecraftServerManager):
 
             container_stats: dict[str, Any] = cast(
                 dict[str, Any],
-                await asyncio.to_thread(
-                    container.stats, stream=False, decode=True
-            ))
+                await asyncio.to_thread(container.stats, stream=False),
+            )
 
-            player_count: int = await self._run_rcon_command(container, "list")
+            if container.status is not Status.RUNNING:
+                return MinecraftServerStatus(
+                    status=Status(value=container.status),
+                    player_count=0,
+                    ram_usage_mb=0,
+                    cpu_usage_percentage=0.0,
+                )
 
-            return MinecraftServerStatus(Status(container.status), container_stats)           
+            player_count_output = await self._execute_rcon_command(container, "list")
+
+            player_count_match: Match[str] | None = re.search(
+                r"\d+", player_count_output or ""
+            )
+
+            if not player_count_match:
+                raise APIError(
+                    "An error occurred while trying to retrieve the player count."
+                )
+
+            return MinecraftServerStatus(
+                status=Status(value=container.status),
+                player_count=int(player_count_match[0]) if player_count_match else 0,
+                ram_usage_mb=int(
+                    container_stats["memory_stats"]["usage"] / (1024 * 1024)
+                ),
+                cpu_usage_percentage=self._calculate_cpu_percentage(container_stats),
+            )
 
         except NotFound as ex:
             raise DockerContainerNotFoundException(server_id) from ex
@@ -375,15 +398,26 @@ class DockerMinecraftServerManager(MinecraftServerManager):
         return True
 
     @staticmethod
-    async def _run_rcon_command(container: Container, command: str) -> bool:
+    async def _execute_rcon_command(container: Container, command: str) -> str | None:
         if container is None:
-            return False
+            return None
 
         try:
-            await asyncio.to_thread(container.exec_run, f"rcon-cli {command}")
-            return True
+            exit_code, output = await asyncio.to_thread(
+                container.exec_run, f"rcon-cli {command}"
+            )
+            if exit_code == 0:
+                return output.decode("utf-8").strip() if output else ""
+            return None
         except APIError:
-            return False
+            return None
+
+    @staticmethod
+    async def _run_rcon_command(container: Container, command: str) -> bool:
+        return (
+            await self._execute_rcon_command(container, command)
+            is not None
+        )
 
     async def _migrate_all_players(self, server_id: str, changing_to_online_mode: bool):
         """Finds all known players and bulk-migrates their data"""
@@ -499,3 +533,20 @@ class DockerMinecraftServerManager(MinecraftServerManager):
         except ClientConnectionError:
             # TODO: log mojang api call failed
             return None
+
+    @staticmethod
+    def _calculate_cpu_percentage(stats: dict[str, Any]) -> float:
+        cpu_stats = stats.get("cpu_stats", {})
+        precpu_stats = stats.get("precpu_stats", {})
+
+        cpu_count = cpu_stats.get("online_cpus", 1)
+        cpu_delta = cpu_stats.get("cpu_usage", {}).get(
+            "total_usage", 0
+        ) - precpu_stats.get("cpu_usage", {}).get("total_usage", 0)
+        system_delta = cpu_stats.get("system_cpu_usage", 0) - precpu_stats.get(
+            "system_cpu_usage", 0
+        )
+
+        if system_delta > 0 and cpu_delta > 0:
+            return round((cpu_delta / system_delta) * cpu_count * 100.0, 2)
+        return 0.0

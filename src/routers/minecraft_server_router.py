@@ -9,16 +9,20 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from pydantic import Field
 
 from dependencies.services import get_docker_server_manager
+from exceptions.client_api_exception import ClientAPIException
+from exceptions.docker_container_not_found_exception import (
+    DockerContainerNotFoundException,
+)
 from schemas.minecraft_server_config.minecraft_fabric_server_config import (
     MinecraftFabricServerConfig,
 )
 from schemas.minecraft_server_config.minecraft_vanilla_server_config import (
     MinecraftVanillaServerConfig,
 )
-from services.minecraft.server_manager import ServerManager
+from services.minecraft.minecraft_server_manager import MinecraftServerManager
 
 DockerServerManagerDependency = Annotated[
-    ServerManager, Depends(get_docker_server_manager)
+    MinecraftServerManager, Depends(get_docker_server_manager)
 ]
 
 minecraft_server_router = APIRouter(
@@ -121,5 +125,9 @@ async def get_minecraft_server_status(
             await websocket.send_json(status.model_dump())
 
             await asyncio.sleep(3)
+    except (DockerContainerNotFoundException, ClientAPIException) as ex:
+        await websocket.send_json({"error": str(ex)})
+
+        await websocket.close()
     except WebSocketDisconnect:
         pass
