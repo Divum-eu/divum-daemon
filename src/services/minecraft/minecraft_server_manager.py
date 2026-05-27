@@ -6,7 +6,8 @@ from schemas.minecraft_server_config.minecraft_server_config import (
 )
 
 
-class ServerManager(ABC):
+class MinecraftServerManager(ABC):
+    """The abstract class for Minecraft server instance managers"""
     @abstractmethod
     async def create(self, config: MinecraftServerConfig) -> str | None:
         """Creates a server and return the unique identifier for it"""

@@ -20,6 +20,9 @@ import hashlib
 
 import os
 
+import re
+from re import Match
+
 import uuid
 
 import docker
@@ -38,7 +41,7 @@ from exceptions.docker_container_not_found_exception import (
 )
 
 from services.minecraft.proxy_router import ProxyRouter
-from services.minecraft.server_manager import ServerManager
+from services.minecraft.minecraft_server_manager import MinecraftServerManager
 
 from schemas.minecraft_server_status import MinecraftServerStatus, Status
 from schemas.minecraft_server_config.minecraft_server_config import (
@@ -50,9 +53,9 @@ DOCKER_NETWORK_NAME = os.environ.get("DOCKER_NETWORK_NAME", "divum-net")
 
 
 # TODO: add logging
-class DockerServerManager(ServerManager):
+class DockerMinecraftServerManager(MinecraftServerManager):
     """
-    The service responsible for handling Minecraft server container instances.
+    The service responsible for handling Minecraft server Docker container instances.
     """
 
     MC_CONTAINER_PORT: int = 25565
@@ -325,10 +328,14 @@ class DockerServerManager(ServerManager):
             return False
 
         if "DIFFICULTY" in changed_keys:
-            await self._run_rcon_command(container, f"difficulty {new_config.difficulty}")
+            await self._run_rcon_command(
+                container, f"difficulty {new_config.difficulty}"
+            )
 
         if "MODE" in changed_keys:
-            await self._run_rcon_command(container, f"defaultgamemode {new_config.mode}")
+            await self._run_rcon_command(
+                container, f"defaultgamemode {new_config.mode}"
+            )
             await self._run_rcon_command(container, f"gamemode {new_config.mode} @a")
 
         if "WHITELIST" in changed_keys:

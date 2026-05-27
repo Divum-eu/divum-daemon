@@ -2,15 +2,17 @@ from typing import Optional
 
 from fastapi import Depends
 
-from services.minecraft.docker_server_manager import DockerServerManager
+from services.minecraft.docker_minecraft_server_manager import (
+    DockerMinecraftServerManager,
+)
 from services.minecraft.mc_proxy_router_service import MCProxyRouterService
 from services.minecraft.proxy_router import ProxyRouter
-from services.minecraft.server_manager import ServerManager
-
+from services.minecraft.minecraft_server_manager import MinecraftServerManager
 
 # Global holders for the singleton instances
 _proxy_router_instance: Optional[ProxyRouter] = None
-_server_manager_instance: Optional[ServerManager] = None
+_server_manager_instance: Optional[MinecraftServerManager] = None
+
 
 def get_mc_proxy_router() -> ProxyRouter:
     """Provides a singleton instance of ProxyRouter."""
@@ -20,12 +22,13 @@ def get_mc_proxy_router() -> ProxyRouter:
         _proxy_router_instance = MCProxyRouterService()
     return _proxy_router_instance
 
+
 def get_docker_server_manager(
-    router: ProxyRouter = Depends(get_mc_proxy_router)
-) -> ServerManager:
+    router: ProxyRouter = Depends(get_mc_proxy_router),
+) -> MinecraftServerManager:
     """Provides a singleton instance of ServerManager, managed by DI."""
     global _server_manager_instance
     if _server_manager_instance is None:
         # We use the 'router' provided by the DI container
-        _server_manager_instance = DockerServerManager(router)
+        _server_manager_instance = DockerMinecraftServerManager(router)
     return _server_manager_instance
