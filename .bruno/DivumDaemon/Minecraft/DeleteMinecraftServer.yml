@@ -1,11 +1,11 @@
 info:
-  name: StopMinecraftServer
+  name: DeleteMinecraftServer
   type: http
-  seq: 3
+  seq: 5
 
 http:
-  method: POST
-  url: "{{address}}/{{base_route}}/minecraft-servers/{{server_id}}/stop"
+  method: DELETE
+  url: "{{address}}/{{base_route}}/minecraft-servers/{{server_id}}"
   auth: inherit
 
 settings:

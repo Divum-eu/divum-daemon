@@ -1,0 +1,7 @@
+info:
+  name: GetMinecraftServerStatus
+  type: websocket
+  seq: 6
+
+websocket:
+  url: "{{ws_address}}/{{base_route}}/minecraft-servers/{{server_id}}/status/ws"
