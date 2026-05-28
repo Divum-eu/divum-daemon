@@ -43,7 +43,11 @@ from exceptions.docker_container_not_found_exception import (
 from services.minecraft.proxy_router import ProxyRouter
 from services.minecraft.minecraft_server_manager import MinecraftServerManager
 
-from schemas.minecraft_server_status import MinecraftServerStatus, Status
+from schemas.minecraft_server_status import (
+    MinecraftServerInstanceStatus,
+    MinecraftServerStatus,
+    MinecraftDockerContainerStatus,
+)
 from schemas.minecraft_server_config.minecraft_server_config import (
     MinecraftServerConfig,
 )
@@ -100,7 +104,7 @@ class DockerMinecraftServerManager(MinecraftServerManager):
             # TODO: log
             raise DockerContainerNotFoundException(server_id)
 
-        was_running: bool = container.status == Status.RUNNING
+        was_running: bool = container.status == MinecraftDockerContainerStatus.RUNNING
 
         # Extract all variables from the container
         current_env = {}
@@ -166,9 +170,24 @@ class DockerMinecraftServerManager(MinecraftServerManager):
                 await asyncio.to_thread(container.stats, stream=False),
             )
 
-            if container.status is not Status.RUNNING:
+            docker_container_status: MinecraftDockerContainerStatus = (
+                MinecraftDockerContainerStatus(value=container.status)
+            )
+
+            server_instance_status: MinecraftServerInstanceStatus
+
+            match docker_container_status:
+                case MinecraftDockerContainerStatus.RUNNING:
+                    server_instance_status = MinecraftServerInstanceStatus.RUNNING
+                case MinecraftDockerContainerStatus.RESTARTING:
+                    server_instance_status = MinecraftServerInstanceStatus.RESTARTING
+                case _:
+                    server_instance_status = MinecraftServerInstanceStatus.STOPPED
+
+
+            if server_instance_status is not MinecraftServerInstanceStatus.RUNNING:
                 return MinecraftServerStatus(
-                    status=Status(value=container.status),
+                    status=server_instance_status,
                     player_count=0,
                     ram_usage_mb=0,
                     cpu_usage_percentage=0.0,
