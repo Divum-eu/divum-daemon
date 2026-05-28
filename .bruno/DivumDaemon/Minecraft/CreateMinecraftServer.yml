@@ -25,15 +25,6 @@ http:
       }
   auth: inherit
 
-scripts:
-  post-response: |-
-    let body = res.body;
-    if (body) {
-      let id = typeof body === 'string' ? body.replace(/^"|"$/g, '') : body;
-      bru.setEnvVar("server_id", id);
-      bru.setVar("server_id", id);
-    }
-
 settings:
   encodeUrl: true
   timeout: 0
