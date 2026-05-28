@@ -5,7 +5,14 @@ The router containing Minecraft server-related endpoints.
 import asyncio
 from typing import Annotated, Union
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from pydantic import Field
 
 from dependencies.services import get_docker_server_manager
@@ -19,6 +26,7 @@ from schemas.minecraft_server_config.minecraft_fabric_server_config import (
 from schemas.minecraft_server_config.minecraft_vanilla_server_config import (
     MinecraftVanillaServerConfig,
 )
+from schemas.minecraft_server_status import MinecraftServerStatus
 from services.minecraft.minecraft_server_manager import MinecraftServerManager
 
 DockerServerManagerDependency = Annotated[
@@ -116,18 +124,16 @@ async def get_minecraft_server_status(
 ):
     """A websocket endpoint for sending server status every three seconds."""
 
-    await websocket.accept()
-
     try:
-        while True:
-            status = await server_manager.get_status(id)
+        await websocket.accept()
 
-            await websocket.send_json(status.model_dump())
+        while True:
+            server_status = await server_manager.get_status(id)
+
+            await websocket.send_json(server_status.model_dump())
 
             await asyncio.sleep(3)
-    except (DockerContainerNotFoundException, ClientAPIException) as ex:
-        await websocket.send_json({"error": str(ex)})
-
-        await websocket.close()
+    except (ClientAPIException, DockerContainerNotFoundException) as ex:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(ex))
     except WebSocketDisconnect:
         pass
