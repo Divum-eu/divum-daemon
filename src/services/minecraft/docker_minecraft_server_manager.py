@@ -554,16 +554,20 @@ class DockerMinecraftServerManager(MinecraftServerManager):
             return None
 
     @staticmethod
-    def _calculate_cpu_percentage(stats: dict[str, Any]) -> float:
-        cpu_stats = stats.get("cpu_stats", {})
-        precpu_stats = stats.get("precpu_stats", {})
+    def _calculate_cpu_usage_percentage(stats: dict[str, Any]) -> float:
+        cpu_stats: dict[str, Any] = stats.get("cpu_stats") or {}
+        precpu_stats: dict[str, Any] = stats.get("precpu_stats") or {}
 
-        cpu_count = cpu_stats.get("online_cpus", 1)
-        cpu_delta = cpu_stats.get("cpu_usage", {}).get(
-            "total_usage", 0
-        ) - precpu_stats.get("cpu_usage", {}).get("total_usage", 0)
-        system_delta = cpu_stats.get("system_cpu_usage", 0) - precpu_stats.get(
-            "system_cpu_usage", 0
+        cpu_count: int = cpu_stats.get("online_cpus") or 1
+
+        cpu_usage: dict[str, Any] = cpu_stats.get("cpu_usage") or {}
+        precpu_usage: dict[str, Any] = precpu_stats.get("cpu_usage") or {}
+
+        cpu_delta: int = (cpu_usage.get("total_usage") or 0) - (
+            precpu_usage.get("total_usage") or 0
+        )
+        system_delta: int = (cpu_stats.get("system_cpu_usage") or 0) - (
+            precpu_stats.get("system_cpu_usage") or 0
         )
 
         if system_delta > 0 and cpu_delta > 0:
