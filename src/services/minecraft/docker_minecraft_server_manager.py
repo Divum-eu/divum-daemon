@@ -193,24 +193,34 @@ class DockerMinecraftServerManager(MinecraftServerManager):
                     cpu_usage_percentage=0.0,
                 )
 
-            player_count_output = await self._execute_rcon_command(container, "list")
+            memory_stats: dict[str, Any] = container_stats.get("memory_stats") or {}
+
+            memory_stats_details: dict[str, Any] = memory_stats.get("stats") or {}
+
+            page_cache_memory: int = (
+                memory_stats_details.get("inactive_file")
+                or memory_stats_details.get("total_inactive_file")
+                or memory_stats_details.get("cache")
+                or 0
+            )
+
+            raw_ram_usage: int = memory_stats.get("usage") or 0
+
+            effective_ram_usage: int = raw_ram_usage - page_cache_memory
+
+            cpu_usage_percentage: float = self._calculate_cpu_usage_percentage(container_stats)
+
+            player_count_output: str | None = await self._execute_rcon_command(container, "list")
 
             player_count_match: Match[str] | None = re.search(
                 r"\d+", player_count_output or ""
             )
 
-            if not player_count_match:
-                raise APIError(
-                    "An error occurred while trying to retrieve the player count."
-                )
-
             return MinecraftServerStatus(
-                status=Status(value=container.status),
+                status=server_instance_status,
                 player_count=int(player_count_match[0]) if player_count_match else 0,
-                ram_usage_mb=int(
-                    container_stats["memory_stats"]["usage"] / (1024 * 1024)
-                ),
-                cpu_usage_percentage=self._calculate_cpu_percentage(container_stats),
+                ram_usage_mb=int(effective_ram_usage / (1000 * 1000)),
+                cpu_usage_percentage=cpu_usage_percentage
             )
 
         except NotFound as ex:
@@ -433,10 +443,7 @@ class DockerMinecraftServerManager(MinecraftServerManager):
 
     @staticmethod
     async def _run_rcon_command(container: Container, command: str) -> bool:
-        return (
-            await self._execute_rcon_command(container, command)
-            is not None
-        )
+        return await DockerMinecraftServerManager._execute_rcon_command(container, command) is not None
 
     async def _migrate_all_players(self, server_id: str, changing_to_online_mode: bool):
         """Finds all known players and bulk-migrates their data"""
