@@ -184,6 +184,24 @@ class DockerMinecraftServerManager(MinecraftServerManager):
                 case _:
                     server_instance_status = MinecraftServerInstanceStatus.STOPPED
 
+            container_env_vars: list[Any] = container.attrs.get("Config", {}).get(
+                "Env", []
+            )
+
+            memory_env: str = next(
+                (env for env in container_env_vars if env.startswith("MEMORY=")),
+                "MEMORY=0M",
+            )
+
+            ram_limit_mb: int = int(memory_env.split("=")[1].replace("M", ""))
+
+            nano_cpus: int = container.attrs.get("HostConfig", {}).get("NanoCpus", 0)
+
+            cpu_limit_percentage: float = (
+                (nano_cpus / DOCKER_CONTAINER_CPU_MULTIPLIER) * 100.0
+                if nano_cpus > 0
+                else 0.0
+            )
 
             if server_instance_status is not MinecraftServerInstanceStatus.RUNNING:
                 return MinecraftServerStatus(
@@ -191,20 +209,9 @@ class DockerMinecraftServerManager(MinecraftServerManager):
                     player_count=0,
                     ram_usage_mb=0,
                     cpu_usage_percentage=0.0,
+                    ram_usage_limit_mb=ram_limit_mb,
+                    cpu_usage_limit_percentage=cpu_limit_percentage,
                 )
-
-            memory_stats: dict[str, Any] = container_stats.get("memory_stats") or {}
-
-            memory_stats_details: dict[str, Any] = memory_stats.get("stats") or {}
-
-            page_cache_memory: int = (
-                memory_stats_details.get("inactive_file")
-                or memory_stats_details.get("total_inactive_file")
-                or memory_stats_details.get("cache")
-                or 0
-            )
-
-            raw_ram_usage: int = memory_stats.get("usage") or 0
 
             effective_ram_usage: int = raw_ram_usage - page_cache_memory
 
@@ -220,7 +227,9 @@ class DockerMinecraftServerManager(MinecraftServerManager):
                 status=server_instance_status,
                 player_count=int(player_count_match[0]) if player_count_match else 0,
                 ram_usage_mb=int(effective_ram_usage / (1000 * 1000)),
-                cpu_usage_percentage=cpu_usage_percentage
+                cpu_usage_percentage=cpu_usage_percentage,
+                ram_usage_limit_mb=ram_limit_mb,
+                cpu_usage_limit_percentage=cpu_limit_percentage,
             )
 
         except NotFound as ex:

@@ -29,3 +29,5 @@ class MinecraftServerStatus(BaseModel):
     player_count: int = Field(...)
     ram_usage_mb: int = Field(...)
     cpu_usage_percentage: float = Field(...)
+    ram_usage_limit_mb: int = Field(...)
+    cpu_usage_limit_percentage: float = Field(...)
