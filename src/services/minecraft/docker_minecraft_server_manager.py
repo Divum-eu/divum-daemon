@@ -213,11 +213,15 @@ class DockerMinecraftServerManager(MinecraftServerManager):
                     cpu_usage_limit_percentage=cpu_limit_percentage,
                 )
 
-            effective_ram_usage: int = raw_ram_usage - page_cache_memory
+            effective_ram_usage: int = self._calculate_memory_usage(container_stats)
 
-            cpu_usage_percentage: float = self._calculate_cpu_usage_percentage(container_stats)
+            cpu_usage_percentage: float = self._calculate_cpu_usage_percentage(
+                container_stats
+            )
 
-            player_count_output: str | None = await self._execute_rcon_command(container, "list")
+            player_count_output: str | None = await self._execute_rcon_command(
+                container, "list"
+            )
 
             player_count_match: Match[str] | None = re.search(
                 r"\d+", player_count_output or ""
@@ -452,7 +456,10 @@ class DockerMinecraftServerManager(MinecraftServerManager):
 
     @staticmethod
     async def _run_rcon_command(container: Container, command: str) -> bool:
-        return await DockerMinecraftServerManager._execute_rcon_command(container, command) is not None
+        return (
+            await DockerMinecraftServerManager._execute_rcon_command(container, command)
+            is not None
+        )
 
     async def _migrate_all_players(self, server_id: str, changing_to_online_mode: bool):
         """Finds all known players and bulk-migrates their data"""
@@ -568,6 +575,22 @@ class DockerMinecraftServerManager(MinecraftServerManager):
         except ClientConnectionError:
             # TODO: log mojang api call failed
             return None
+
+    @staticmethod
+    def _calculate_memory_usage(stats: dict[str, Any]) -> int:
+        memory_stats: dict[str, Any] = stats.get("memory_stats") or {}
+        memory_stats_details: dict[str, Any] = memory_stats.get("stats") or {}
+
+        page_cache_memory: int = (
+            memory_stats_details.get("inactive_file")
+            or memory_stats_details.get("total_inactive_file")
+            or memory_stats_details.get("cache")
+            or 0
+        )
+
+        raw_ram_usage: int = memory_stats.get("usage") or 0
+
+        return raw_ram_usage - page_cache_memory
 
     @staticmethod
     def _calculate_cpu_usage_percentage(stats: dict[str, Any]) -> float:
