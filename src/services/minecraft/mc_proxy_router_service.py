@@ -10,7 +10,6 @@ ROUTER_API_ADDRESS = os.getenv("MC_ROUTER_API_ADDRESS", "")
 
 
 class MCProxyRouterService(ProxyRouter):
-
     async def add(self, server_address: str, server_host: str) -> bool:
         """Add an entry to the itzg/mc-router hosts"""
 

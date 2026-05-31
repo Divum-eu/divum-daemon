@@ -1,7 +1,12 @@
+"""DTOs for a Minecraft server instance's status"""
+
 from pydantic import BaseModel, Field
 from enum import Enum
 
-class Status(str, Enum):
+
+class MinecraftDockerContainerStatus(str, Enum):
+    """Values for the Minecraft server instance's docker container state."""
+
     CREATED = "created"
     RESTARTING = "restarting"
     RUNNING = "running"
@@ -9,9 +14,20 @@ class Status(str, Enum):
     EXITED = "exited"
     DEAD = "dead"
 
-class MinecraftServerStatus(BaseModel):
-    # status of the minecraft instance according to the ServerManager's API
-    status: Status = Field(...)
+class MinecraftServerInstanceStatus(str, Enum):
+    """Values for the Minecraft server instance's state."""
 
-    # last lines of the log from the minecraft instance
-    log: str = Field(...)
+    STARTING = "starting"
+    RESTARTING = "restarting"
+    RUNNING = "running"
+    STOPPED = "stopped"
+
+class MinecraftServerStatus(BaseModel):
+    """The Minecraft server instance's status"""
+
+    status: MinecraftServerInstanceStatus = Field(...)
+    player_count: int = Field(...)
+    ram_usage_mb: int = Field(...)
+    cpu_usage_percentage: float = Field(...)
+    ram_usage_limit_mb: int = Field(...)
+    cpu_usage_limit_percentage: float = Field(...)

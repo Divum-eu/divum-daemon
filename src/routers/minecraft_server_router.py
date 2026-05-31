@@ -2,22 +2,35 @@
 The router containing Minecraft server-related endpoints.
 """
 
+import asyncio
 from typing import Annotated, Union
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from pydantic import Field
 
 from dependencies.services import get_docker_server_manager
+from exceptions.client_api_exception import ClientAPIException
+from exceptions.docker_container_not_found_exception import (
+    DockerContainerNotFoundException,
+)
 from schemas.minecraft_server_config.minecraft_fabric_server_config import (
     MinecraftFabricServerConfig,
 )
 from schemas.minecraft_server_config.minecraft_vanilla_server_config import (
     MinecraftVanillaServerConfig,
 )
-from services.minecraft.server_manager import ServerManager
+from schemas.minecraft_server_status import MinecraftServerStatus
+from services.minecraft.minecraft_server_manager import MinecraftServerManager
 
 DockerServerManagerDependency = Annotated[
-    ServerManager, Depends(get_docker_server_manager)
+    MinecraftServerManager, Depends(get_docker_server_manager)
 ]
 
 minecraft_server_router = APIRouter(
@@ -56,7 +69,9 @@ async def start_minecraft_server(
     server_started: bool = await server_manager.start(id)
 
     if not server_started:
-        raise HTTPException(404, "No Minecraft server instance exists with the given ID.")
+        raise HTTPException(
+            404, "No Minecraft server instance exists with the given ID."
+        )
     return
 
 
@@ -68,7 +83,9 @@ async def stop_minecraft_server(id: str, server_manager: DockerServerManagerDepe
     server_stopped: bool = await server_manager.stop(id)
 
     if not server_stopped:
-        raise HTTPException(404, "No Minecraft server instance exists with the given ID.")
+        raise HTTPException(
+            404, "No Minecraft server instance exists with the given ID."
+        )
 
 
 @minecraft_server_router.patch("/{id}", status_code=204)
@@ -99,3 +116,24 @@ async def delete_minecraft_server(
         raise HTTPException(
             404, "No Minecraft server instance exists with the given ID."
         )
+
+
+@minecraft_server_router.websocket("/{id}/status/ws")
+async def get_minecraft_server_status(
+    websocket: WebSocket, id: str, server_manager: DockerServerManagerDependency
+):
+    """A websocket endpoint for sending server status every three seconds."""
+
+    try:
+        await websocket.accept()
+
+        while True:
+            server_status = await server_manager.get_status(id)
+
+            await websocket.send_json(server_status.model_dump())
+
+            await asyncio.sleep(3)
+    except (ClientAPIException, DockerContainerNotFoundException) as ex:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(ex))
+    except WebSocketDisconnect:
+        pass

@@ -4,8 +4,8 @@ info:
   seq: 4
 
 http:
-  method: POST
-  url: "{{address}}/{{base_route}}/minecraft-servers/df77235e-1c38-40df-be57-d95b866f0fdd/update"
+  method: PATCH
+  url: "{{address}}/{{base_route}}/minecraft-servers/{{server_id}}"
   body:
     type: json
     data: |-

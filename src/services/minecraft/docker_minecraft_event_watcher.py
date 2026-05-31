@@ -7,13 +7,18 @@ import docker
 from pydantic import TypeAdapter
 
 from routers.minecraft_server_router import MinecraftServerConfig
-from services.minecraft.server_manager import ServerManager
+from services.minecraft.minecraft_server_manager import MinecraftServerManager
 
 WORLDS_DIR = os.getenv("WORLDS_DIR", "../..")
 
-class DockerEventWatcher:
-    def __init__(self, server_manager: ServerManager, main_loop: asyncio.AbstractEventLoop):
-        self._server_manager: ServerManager = server_manager
+
+class DockerMinecraftEventWatcher:
+    def __init__(
+        self,
+        server_manager: MinecraftServerManager,
+        main_loop: asyncio.AbstractEventLoop,
+    ):
+        self._server_manager: MinecraftServerManager = server_manager
         self._client = docker.from_env()
         self._main_loop: asyncio.AbstractEventLoop = main_loop
         self._thread = None
@@ -30,21 +35,24 @@ class DockerEventWatcher:
             if not container_name:
                 continue
 
-            pending_path = os.path.abspath(f"{WORLDS_DIR}/data/{container_name}/.pending_config.json")
+            pending_path = os.path.abspath(
+                f"{WORLDS_DIR}/data/{container_name}/.pending_config.json"
+            )
 
             if os.path.exists(pending_path):
                 try:
                     with open(pending_path, "r") as f:
                         config_data = f.read()
-                        pending_config = TypeAdapter(MinecraftServerConfig).validate_json(config_data)
+                        pending_config = TypeAdapter(
+                            MinecraftServerConfig
+                        ).validate_json(config_data)
 
                         os.remove(pending_path)
 
                         future = asyncio.run_coroutine_threadsafe(
                             self._server_manager.update(container_name, pending_config),
-                            self._main_loop
+                            self._main_loop,
                         )
                         future.result()
                 except Exception as e:
                     print(f"Failed to apply pending config for {container_name}: {e}")
-

@@ -4,3 +4,7 @@ variables:
     value: http://localhost:8000
   - name: base_route
     value: api/v1
+  - name: ws_address
+    value: ws://localhost:8000
+  - name: server_id
+    value: 4c97a1d5-e38e-419c-bab4-84c15670935a

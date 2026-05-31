@@ -1,9 +1,10 @@
 """
 Contains the main service responsible for handling Minecraft server container instances.
 """
+
 import json
 import shutil
-from typing import AnyStr
+from typing import Any, AnyStr, cast
 
 import aiofiles
 import aiofiles.os
@@ -19,33 +20,46 @@ import hashlib
 
 import os
 
+import re
+from re import Match
+
 import uuid
 
 import docker
 from docker.models.containers import Container
 from docker.errors import APIError, ImageNotFound, NotFound
 
-from constants.constants import MINECRAFT_SERVER_DOCKER_IMAGE, DOCKER_CONTAINER_CPU_MULTIPLIER, \
-    MC_ROUTER_CONTAINER_LABEL
+from constants.constants import (
+    MINECRAFT_SERVER_DOCKER_IMAGE,
+    DOCKER_CONTAINER_CPU_MULTIPLIER,
+    MC_ROUTER_CONTAINER_LABEL,
+)
 
 from exceptions.client_api_exception import ClientAPIException
-from exceptions.docker_container_not_found_exception import DockerContainerNotFoundException
+from exceptions.docker_container_not_found_exception import (
+    DockerContainerNotFoundException,
+)
 
 from services.minecraft.proxy_router import ProxyRouter
-from services.minecraft.server_manager import ServerManager
+from services.minecraft.minecraft_server_manager import MinecraftServerManager
 
-from schemas.minecraft_server_status import MinecraftServerStatus, Status
-from schemas.minecraft_server_config.minecraft_server_config import MinecraftServerConfig
-
+from schemas.minecraft_server_status import (
+    MinecraftServerInstanceStatus,
+    MinecraftServerStatus,
+    MinecraftDockerContainerStatus,
+)
+from schemas.minecraft_server_config.minecraft_server_config import (
+    MinecraftServerConfig,
+)
 
 WORLDS_DIR = os.environ.get("WORLDS_DIR", "../..")
 DOCKER_NETWORK_NAME = os.environ.get("DOCKER_NETWORK_NAME", "divum-net")
 
 
 # TODO: add logging
-class DockerServerManager(ServerManager):
+class DockerMinecraftServerManager(MinecraftServerManager):
     """
-    The service responsible for handling Minecraft server container instances.
+    The service responsible for handling Minecraft server Docker container instances.
     """
 
     MC_CONTAINER_PORT: int = 25565
@@ -57,7 +71,6 @@ class DockerServerManager(ServerManager):
         except Exception as err:
             raise ClientAPIException("Couldn't start the Docker client.") from err
 
-
     async def create(self, config: MinecraftServerConfig) -> str | None:
         """Creates an itzg/minecraft-server container with the given configuration"""
 
@@ -67,7 +80,9 @@ class DockerServerManager(ServerManager):
         host_path = os.path.abspath(f"{WORLDS_DIR}/data/{container_name}")
         await aiofiles.os.makedirs(host_path)
 
-        container: Container | None = await self._create_container(container_name, config, host_path)
+        container: Container | None = await self._create_container(
+            container_name, config, host_path
+        )
 
         # remove the created the folder if creation failed
         if not container:
@@ -83,14 +98,13 @@ class DockerServerManager(ServerManager):
 
         return container.name
 
-
     async def update(self, server_id: str, new_config: MinecraftServerConfig) -> bool:
         container: Container | None = await self._get_container(server_id)
         if not container:
             # TODO: log
             raise DockerContainerNotFoundException(server_id)
 
-        was_running: bool = container.status == Status.RUNNING
+        was_running: bool = container.status == MinecraftDockerContainerStatus.RUNNING
 
         # Extract all variables from the container
         current_env = {}
@@ -109,23 +123,33 @@ class DockerServerManager(ServerManager):
         server_address_changed: bool = current_address != new_address
 
         # Checks if the cpu limit has been changed
-        cpu_limit_changed: bool = (
-                int(new_config.cpu_cores_limit * DOCKER_CONTAINER_CPU_MULTIPLIER) != container.attrs["HostConfig"].get("NanoCpus")
+        cpu_limit_changed: bool = int(
+            new_config.cpu_cores_limit * DOCKER_CONTAINER_CPU_MULTIPLIER
+        ) != container.attrs["HostConfig"].get("NanoCpus")
+
+        requires_restart: bool = (
+            any(key not in self.HOT_UPDATE_KEYS for key in changed_keys)
+            or cpu_limit_changed
+            or server_address_changed
         )
 
-        requires_restart: bool = (any(key not in self.HOT_UPDATE_KEYS for key in changed_keys)
-                            or cpu_limit_changed
-                            or server_address_changed)
-
-        pending_path = os.path.abspath(f"{WORLDS_DIR}/data/{server_id}/.pending_config.json")
+        pending_path = os.path.abspath(
+            f"{WORLDS_DIR}/data/{server_id}/.pending_config.json"
+        )
         if requires_restart or not was_running:
-            pending_path = os.path.abspath(f"{WORLDS_DIR}/data/{server_id}/.pending_config.json")
+            pending_path = os.path.abspath(
+                f"{WORLDS_DIR}/data/{server_id}/.pending_config.json"
+            )
             if os.path.exists(pending_path):
                 await aiofiles.os.remove(pending_path)
 
             # current_env["ONLINE_MODE"] returns a string "TRUE" or "FALSE"
-            online_mode_changed: bool = current_env["ONLINE_MODE"] != new_env["ONLINE_MODE"]
-            return await self._recreate_container(server_id, new_config, online_mode_changed, was_running)
+            online_mode_changed: bool = (
+                current_env["ONLINE_MODE"] != new_env["ONLINE_MODE"]
+            )
+            return await self._recreate_container(
+                server_id, new_config, online_mode_changed, was_running
+            )
 
         # Generate a .pending_config.json file to be applied on server stop
         await self._apply_live_patches(server_id, new_config, changed_keys)
@@ -134,33 +158,90 @@ class DockerServerManager(ServerManager):
 
         return True
 
-    # TODO: remove-ni go toq bokluk che samo me drazni
-    async def status(self, server_id: str) -> MinecraftServerStatus:
+    async def get_status(self, server_id: str) -> MinecraftServerStatus:
+        """Returns a snapshot of the Minecraft server instance status (i.e. active players, ram and cpu usage, etc.)"""
         try:
             container: Container = await asyncio.to_thread(
                 self._client.containers.get, server_id
             )
 
-            status = container.status
-            log = "No logs"
-
-            # If the minecraft instance was very recently created, log files are not yet generated
-            host_path = os.path.abspath(
-                f"{WORLDS_DIR}/data/{container.name}/logs/latest.log"
+            container_stats: dict[str, Any] = cast(
+                dict[str, Any],
+                await asyncio.to_thread(container.stats, stream=False),
             )
-            if os.path.exists(host_path):
-                async with aiofiles.open(host_path, "r") as f:
-                    log = await f.read()
 
-            return MinecraftServerStatus(status=Status(value=status), log=log)
+            docker_container_status: MinecraftDockerContainerStatus = (
+                MinecraftDockerContainerStatus(value=container.status)
+            )
+
+            server_instance_status: MinecraftServerInstanceStatus
+
+            match docker_container_status:
+                case MinecraftDockerContainerStatus.RUNNING:
+                    server_instance_status = MinecraftServerInstanceStatus.RUNNING
+                case MinecraftDockerContainerStatus.RESTARTING:
+                    server_instance_status = MinecraftServerInstanceStatus.RESTARTING
+                case _:
+                    server_instance_status = MinecraftServerInstanceStatus.STOPPED
+
+            container_env_vars: list[Any] = container.attrs.get("Config", {}).get(
+                "Env", []
+            )
+
+            memory_env: str = next(
+                (env for env in container_env_vars if env.startswith("MEMORY=")),
+                "MEMORY=0M",
+            )
+
+            ram_limit_mb: int = int(memory_env.split("=")[1].replace("M", ""))
+
+            nano_cpus: int = container.attrs.get("HostConfig", {}).get("NanoCpus", 0)
+
+            cpu_limit_percentage: float = (
+                (nano_cpus / DOCKER_CONTAINER_CPU_MULTIPLIER) * 100.0
+                if nano_cpus > 0
+                else 0.0
+            )
+
+            if server_instance_status is not MinecraftServerInstanceStatus.RUNNING:
+                return MinecraftServerStatus(
+                    status=server_instance_status,
+                    player_count=0,
+                    ram_usage_mb=0,
+                    cpu_usage_percentage=0.0,
+                    ram_usage_limit_mb=ram_limit_mb,
+                    cpu_usage_limit_percentage=cpu_limit_percentage,
+                )
+
+            effective_ram_usage: int = self._calculate_memory_usage(container_stats)
+
+            cpu_usage_percentage: float = self._calculate_cpu_usage_percentage(
+                container_stats
+            )
+
+            player_count_output: str | None = await self._execute_rcon_command(
+                container, "list"
+            )
+
+            player_count_match: Match[str] | None = re.search(
+                r"\d+", player_count_output or ""
+            )
+
+            return MinecraftServerStatus(
+                status=server_instance_status,
+                player_count=int(player_count_match[0]) if player_count_match else 0,
+                ram_usage_mb=int(effective_ram_usage / (1000 * 1000)),
+                cpu_usage_percentage=cpu_usage_percentage,
+                ram_usage_limit_mb=ram_limit_mb,
+                cpu_usage_limit_percentage=cpu_limit_percentage,
+            )
 
         except NotFound as ex:
             raise DockerContainerNotFoundException(server_id) from ex
         except APIError as err:
             raise ClientAPIException(
-                f"An error occurred while trying to get the status of container '{server_id}'."
+                f"An error occurred while trying to get the status of server '{server_id}'."
             ) from err
-
 
     async def start(self, server_id: str) -> bool:
         try:
@@ -171,11 +252,10 @@ class DockerServerManager(ServerManager):
 
             await asyncio.to_thread(container.start)
 
-        except (NotFound, APIError):
+        except NotFound, APIError:
             return False
 
         return True
-
 
     async def stop(self, server_id: str) -> bool:
         try:
@@ -186,15 +266,13 @@ class DockerServerManager(ServerManager):
 
             await asyncio.to_thread(container.stop)
 
-        except (NotFound, APIError):
+        except NotFound, APIError:
             return False
 
         return True
 
-
     async def delete(self, server_id: str) -> bool:
         return await self._remove(server_id, permanently=True, force=True)
-
 
     async def _remove(self, server_id: str, permanently: bool, force: bool) -> bool:
         try:
@@ -209,11 +287,10 @@ class DockerServerManager(ServerManager):
                 if os.path.exists(host_path):
                     await asyncio.to_thread(shutil.rmtree, host_path)
 
-        except (NotFound, APIError):
+        except NotFound, APIError:
             return False
 
         return True
-
 
     async def _get_container(self, server_id: str) -> Container | None:
         try:
@@ -221,17 +298,28 @@ class DockerServerManager(ServerManager):
                 self._client.containers.get, server_id
             )
             return container
-        except (NotFound, APIError):
+        except NotFound, APIError:
             return None
 
-    async def _recreate_container(self, server_id: str, new_config: MinecraftServerConfig, online_mode_changed: bool, was_running: bool) -> bool:
+    async def _recreate_container(
+        self,
+        server_id: str,
+        new_config: MinecraftServerConfig,
+        online_mode_changed: bool,
+        was_running: bool,
+    ) -> bool:
         await self.stop(server_id)
         await self._remove(server_id, permanently=False, force=True)
 
         if online_mode_changed:
             await self._migrate_all_players(server_id, new_config.online_mode)
 
-            poisoned_files = ["usercache.json", "whitelist.json", "ops.json", "banned-players.json"]
+            poisoned_files = [
+                "usercache.json",
+                "whitelist.json",
+                "ops.json",
+                "banned-players.json",
+            ]
             for file_name in poisoned_files:
                 file_path = os.path.join(f"{WORLDS_DIR}/data/{server_id}", file_name)
                 if os.path.exists(file_path):
@@ -239,7 +327,9 @@ class DockerServerManager(ServerManager):
 
         host_path = os.path.abspath(f"{WORLDS_DIR}/data/{server_id}")
 
-        new_container: Container | None = await self._create_container(server_id, new_config, host_path)
+        new_container: Container | None = await self._create_container(
+            server_id, new_config, host_path
+        )
         if not new_container:
             raise CreateContainerException
 
@@ -248,10 +338,15 @@ class DockerServerManager(ServerManager):
 
         return True
 
-    async def _create_container(self, server_id: str, config: MinecraftServerConfig, host_path: AnyStr) -> Container | None:
+    async def _create_container(
+        self, server_id: str, config: MinecraftServerConfig, host_path: AnyStr
+    ) -> Container | None:
         try:
             if not config.online_mode and config.whitelist and config.enable_whitelist:
-                config.whitelist = [self._generate_offline_uuid(username) for username in config.whitelist]
+                config.whitelist = [
+                    self._generate_offline_uuid(username)
+                    for username in config.whitelist
+                ]
 
             new_container: Container = await asyncio.to_thread(
                 self._client.containers.create,
@@ -282,39 +377,44 @@ class DockerServerManager(ServerManager):
 
     async def _pull_image(self, image: str) -> bool:
         try:
-            await asyncio.to_thread(self._client.images.pull,
-                                repository=image,
-                                tag="latest"
-                                )
+            await asyncio.to_thread(
+                self._client.images.pull, repository=image, tag="latest"
+            )
         except APIError:
             return False
 
         return True
 
-
-    async def _apply_live_patches(self, server_id: str, new_config: MinecraftServerConfig, changed_keys: list[str]) -> bool:
+    async def _apply_live_patches(
+        self, server_id: str, new_config: MinecraftServerConfig, changed_keys: list[str]
+    ) -> bool:
         container: Container | None = await self._get_container(server_id)
         if not container:
             return False
 
         if "DIFFICULTY" in changed_keys:
-            await self._run_rcon(container, f"difficulty {new_config.difficulty}")
+            await self._run_rcon_command(
+                container, f"difficulty {new_config.difficulty}"
+            )
 
         if "MODE" in changed_keys:
-            await self._run_rcon(container, f"defaultgamemode {new_config.mode}")
-            await self._run_rcon(container, f"gamemode {new_config.mode} @a")
+            await self._run_rcon_command(
+                container, f"defaultgamemode {new_config.mode}"
+            )
+            await self._run_rcon_command(container, f"gamemode {new_config.mode} @a")
 
         if "WHITELIST" in changed_keys:
             # Enforce the whitelist
             if new_config.enable_whitelist:
-                await self._run_rcon(container, "whitelist on")
+                await self._run_rcon_command(container, "whitelist on")
             else:
-                await self._run_rcon(container, "whitelist off")
+                await self._run_rcon_command(container, "whitelist off")
 
             # Set the uuid generation strategy
             if new_config.online_mode:
                 get_uuid_strategy = self._get_premium_uuid
             else:
+
                 async def get_uuid_strategy(username: str):
                     return self._generate_offline_uuid(username)
 
@@ -328,25 +428,38 @@ class DockerServerManager(ServerManager):
                         whitelist_data.append({"uuid": player_uuid, "name": name})
 
             # Completely overwrite the whitelist.json file
-            whitelist_path = os.path.abspath(f"{WORLDS_DIR}/data/{server_id}/whitelist.json")
+            whitelist_path = os.path.abspath(
+                f"{WORLDS_DIR}/data/{server_id}/whitelist.json"
+            )
             async with aiofiles.open(whitelist_path, "w") as f:
                 await f.write(json.dumps(whitelist_data, indent=2))
 
             # Force the server to read the newly created file
-            await self._run_rcon(container, "whitelist reload")
+            await self._run_rcon_command(container, "whitelist reload")
 
         return True
 
     @staticmethod
-    async def _run_rcon(container: Container, command: str) -> bool:
+    async def _execute_rcon_command(container: Container, command: str) -> str | None:
         if container is None:
-            return False
+            return None
 
         try:
-            await asyncio.to_thread(container.exec_run, f"rcon-cli {command}")
-            return True
+            exit_code, output = await asyncio.to_thread(
+                container.exec_run, f"rcon-cli {command}"
+            )
+            if exit_code == 0:
+                return output.decode("utf-8").strip() if output else ""
+            return None
         except APIError:
-            return False
+            return None
+
+    @staticmethod
+    async def _run_rcon_command(container: Container, command: str) -> bool:
+        return (
+            await DockerMinecraftServerManager._execute_rcon_command(container, command)
+            is not None
+        )
 
     async def _migrate_all_players(self, server_id: str, changing_to_online_mode: bool):
         """Finds all known players and bulk-migrates their data"""
@@ -357,10 +470,13 @@ class DockerServerManager(ServerManager):
             return
 
         for username in usernames:
-            await self._migrate_player_data(server_id, username, changing_to_online_mode)
+            await self._migrate_player_data(
+                server_id, username, changing_to_online_mode
+            )
 
-
-    async def _migrate_player_data(self, server_id: str, username: str, changing_to_online_mode: bool) -> bool:
+    async def _migrate_player_data(
+        self, server_id: str, username: str, changing_to_online_mode: bool
+    ) -> bool:
         """Migrate a player's save files between offline and online UUIDs"""
 
         offline_uuid = self._generate_offline_uuid(username)
@@ -395,7 +511,6 @@ class DockerServerManager(ServerManager):
 
         return True
 
-
     @staticmethod
     async def _get_all_known_usernames(server_id: str) -> list[str]:
         """Reads the server's usercache.json to find every unique username"""
@@ -411,19 +526,20 @@ class DockerServerManager(ServerManager):
 
             json_data = json.loads(data)
 
-            unique_usernames: set[str] = {entry["name"] for entry in json_data if "name" in entry}
+            unique_usernames: set[str] = {
+                entry["name"] for entry in json_data if "name" in entry
+            }
 
             return list(unique_usernames)
 
-        except Exception as e:
+        except Exception:
             print(f"Failed to read usercache.json for {server_id}")
             raise
-
 
     @staticmethod
     def _generate_offline_uuid(username: str) -> str:
         # 1. Create the string
-        data = f"OfflinePlayer:{username}".encode('utf-8')
+        data = f"OfflinePlayer:{username}".encode("utf-8")
 
         # 2. Get the MD5 hash
         md5_hash = hashlib.md5(data).digest()
@@ -431,12 +547,15 @@ class DockerServerManager(ServerManager):
         # 3. Apply the UUID version 3 and variant bits
         # (Setting the 7th byte for version 3, and 9th byte for variant 2)
         uuid_bytes = bytearray(md5_hash)
-        uuid_bytes[6] = (uuid_bytes[6] & 0x0f) | 0x30  # remove first 4 bits and replace with the number 3 (0x30)
-        uuid_bytes[8] = (uuid_bytes[8] & 0x3f) | 0x80  # remove first 2 bits and replace with the number 8 (0x80)
+        uuid_bytes[6] = (
+            uuid_bytes[6] & 0x0F
+        ) | 0x30  # remove first 4 bits and replace with the number 3 (0x30)
+        uuid_bytes[8] = (
+            uuid_bytes[8] & 0x3F
+        ) | 0x80  # remove first 2 bits and replace with the number 8 (0x80)
 
         # 4. Return as a formatted UUID object/string
         return str(uuid.UUID(bytes=bytes(uuid_bytes)))
-
 
     @staticmethod
     async def _get_premium_uuid(username: str) -> str | None:
@@ -456,3 +575,40 @@ class DockerServerManager(ServerManager):
         except ClientConnectionError:
             # TODO: log mojang api call failed
             return None
+
+    @staticmethod
+    def _calculate_memory_usage(stats: dict[str, Any]) -> int:
+        memory_stats: dict[str, Any] = stats.get("memory_stats") or {}
+        memory_stats_details: dict[str, Any] = memory_stats.get("stats") or {}
+
+        page_cache_memory: int = (
+            memory_stats_details.get("inactive_file")
+            or memory_stats_details.get("total_inactive_file")
+            or memory_stats_details.get("cache")
+            or 0
+        )
+
+        raw_ram_usage: int = memory_stats.get("usage") or 0
+
+        return raw_ram_usage - page_cache_memory
+
+    @staticmethod
+    def _calculate_cpu_usage_percentage(stats: dict[str, Any]) -> float:
+        cpu_stats: dict[str, Any] = stats.get("cpu_stats") or {}
+        precpu_stats: dict[str, Any] = stats.get("precpu_stats") or {}
+
+        cpu_count: int = cpu_stats.get("online_cpus") or 1
+
+        cpu_usage: dict[str, Any] = cpu_stats.get("cpu_usage") or {}
+        precpu_usage: dict[str, Any] = precpu_stats.get("cpu_usage") or {}
+
+        cpu_delta: int = (cpu_usage.get("total_usage") or 0) - (
+            precpu_usage.get("total_usage") or 0
+        )
+        system_delta: int = (cpu_stats.get("system_cpu_usage") or 0) - (
+            precpu_stats.get("system_cpu_usage") or 0
+        )
+
+        if system_delta > 0 and cpu_delta > 0:
+            return round((cpu_delta / system_delta) * cpu_count * 100.0, 2)
+        return 0.0

@@ -5,7 +5,7 @@ info:
 
 http:
   method: POST
-  url: "{{address}}/{{base_route}}/minecraft-servers/11569021-9086-45ff-99fd-920c80e4af88/start"
+  url: "{{address}}/{{base_route}}/minecraft-servers/{{server_id}}/start"
   auth: inherit
 
 settings:
