@@ -26,8 +26,9 @@ from schemas.minecraft_server_config.minecraft_fabric_server_config import (
 from schemas.minecraft_server_config.minecraft_vanilla_server_config import (
     MinecraftVanillaServerConfig,
 )
-from schemas.minecraft_server_status import MinecraftServerStatus
 from services.minecraft.minecraft_server_manager import MinecraftServerManager
+
+from utils.jwt_verification import verify_jwt_signature
 
 DockerServerManagerDependency = Annotated[
     MinecraftServerManager, Depends(get_docker_server_manager)
@@ -36,6 +37,7 @@ DockerServerManagerDependency = Annotated[
 minecraft_server_router = APIRouter(
     prefix="/v1/minecraft-servers",
     tags=["minecraft_servers"],
+    dependencies=[Depends(verify_jwt_signature)]
 )
 
 MinecraftServerConfig = Annotated[
