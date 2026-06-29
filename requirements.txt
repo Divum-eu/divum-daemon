@@ -12,7 +12,6 @@ charset-normalizer==3.4.7
 click==8.3.1
 colorama==0.4.6
 cryptography==49.0.0
--e file:///home/dimitar/Projects/Personal/divum-projects/divum-daemon
 dnspython==2.8.0
 docker==7.1.0
 email-validator==2.3.0
