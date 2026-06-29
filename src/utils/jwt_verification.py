@@ -6,11 +6,11 @@ import os
 from typing import Any
 
 from fastapi.security import HTTPBearer
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.security.http import HTTPAuthorizationCredentials
 
 import jwt
-from jwt import PyJWK, PyJWKClient
+from jwt import ExpiredSignatureError, InvalidTokenError, PyJWK, PyJWKClient, PyJWKClientConnectionError, PyJWKClientError
 
 from starlette import status
 
@@ -56,3 +56,32 @@ def verify_jwt_signature(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized token."
         ) from ex
+
+
+async def verify_jwt_websocket(websocket: WebSocket) -> dict[str, Any]:
+    """Verifies JWT from the Authorization header in a WebSocket connection scope."""
+
+    headers = dict(websocket.scope.get("headers", []))
+    auth_header = headers.get(b"authorization", b"").decode()
+
+    if not auth_header.startswith("Bearer "):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        raise WebSocketDisconnect()
+
+    token = auth_header[len("Bearer "):]
+
+    try:
+        signing_key: PyJWK = jwks_client.get_signing_key_from_jwt(token)
+
+        payload: dict[str, Any] = jwt.decode(
+            token, key=signing_key.key, algorithms=["EdDSA"], issuer=JWT_BACKEND_ISSUER
+        )
+
+        return payload
+
+    except (ExpiredSignatureError, InvalidTokenError) as ex:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        raise WebSocketDisconnect() from ex
+    except (PyJWKClientConnectionError, PyJWKClientError) as ex:
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        raise WebSocketDisconnect() from ex

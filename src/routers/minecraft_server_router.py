@@ -28,16 +28,17 @@ from schemas.minecraft_server_config.minecraft_vanilla_server_config import (
 )
 from services.minecraft.minecraft_server_manager import MinecraftServerManager
 
-from utils.jwt_verification import verify_jwt_signature
+from utils.jwt_verification import verify_jwt_signature, verify_jwt_websocket
 
 DockerServerManagerDependency = Annotated[
     MinecraftServerManager, Depends(get_docker_server_manager)
 ]
 
+JwtSignatureDependency = Annotated[dict, Depends(verify_jwt_signature)]
+
 minecraft_server_router = APIRouter(
     prefix="/v1/minecraft-servers",
     tags=["minecraft_servers"],
-    dependencies=[Depends(verify_jwt_signature)]
 )
 
 MinecraftServerConfig = Annotated[
@@ -48,7 +49,9 @@ MinecraftServerConfig = Annotated[
 
 @minecraft_server_router.post("", status_code=200)
 async def create_minecraft_server(
-    request: MinecraftServerConfig, server_manager: DockerServerManagerDependency
+    request: MinecraftServerConfig,
+    server_manager: DockerServerManagerDependency,
+    jwtAuth: JwtSignatureDependency,
 ):
     """
     The endpoint for Minecraft server creation.
@@ -63,7 +66,9 @@ async def create_minecraft_server(
 
 @minecraft_server_router.post("/{id}/start", status_code=202)
 async def start_minecraft_server(
-    id: str, server_manager: DockerServerManagerDependency
+    id: str,
+    server_manager: DockerServerManagerDependency,
+    jwtAuth: JwtSignatureDependency,
 ):
     """
     The endpoint for starting Minecraft server.
@@ -78,7 +83,11 @@ async def start_minecraft_server(
 
 
 @minecraft_server_router.post("/{id}/stop", status_code=202)
-async def stop_minecraft_server(id: str, server_manager: DockerServerManagerDependency):
+async def stop_minecraft_server(
+    id: str,
+    server_manager: DockerServerManagerDependency,
+    jwtAuth: JwtSignatureDependency,
+):
     """
     The endpoint for stopping Minecraft server.
     """
@@ -95,6 +104,7 @@ async def update_minecraft_server(
     id: str,
     request: MinecraftServerConfig,
     server_manager: DockerServerManagerDependency,
+    jwtAuth: JwtSignatureDependency,
 ):
     """
     The endpoint for updating a Minecraft server instance's configuration.
@@ -109,7 +119,9 @@ async def update_minecraft_server(
 
 @minecraft_server_router.delete("/{id}", status_code=204)
 async def delete_minecraft_server(
-    id: str, server_manager: DockerServerManagerDependency
+    id: str,
+    server_manager: DockerServerManagerDependency,
+    jwtAuth: JwtSignatureDependency,
 ):
     """The endpoint for deleting a Minecraft server instance."""
     was_successful: bool = await server_manager.delete(id)
@@ -127,6 +139,7 @@ async def get_minecraft_server_status(
     """A websocket endpoint for sending server status every three seconds."""
 
     try:
+        await verify_jwt_websocket(websocket)
         await websocket.accept()
 
         while True:
